@@ -2,7 +2,7 @@ package server
 
 import (
 	"github.com/gorilla/mux"
-	"github.com/icedmocha/core/handlers"
+	"github.com/iced-mocha/core/handlers"
 )
 
 type Server struct {
@@ -12,7 +12,7 @@ type Server struct {
 func New(api handlers.CoreAPI) (*Server, error) {
 	s := &Server{Router: mux.NewRouter()}
 
-	s.Router.HandleFunc("/v1/{id}/posts", api.GetPosts).Methods("GET")
+	s.Router.HandleFunc("/v1/posts", api.GetPosts).Methods("GET")
 
 	return s, nil
 }

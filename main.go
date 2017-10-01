@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/icedmocha/core/handlers"
-	"github.com/icedmocha/core/server"
+	"github.com/iced-mocha/core/handlers"
+	"github.com/iced-mocha/core/server"
 	"log"
 	"net/http"
 )
