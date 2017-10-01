@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/iced-mocha/core/models"
+	"github.com/iced-mocha/shared/models"
 )
 
 type CoreHandler struct{}
