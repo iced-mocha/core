@@ -3,7 +3,6 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/iced-mocha/shared/models"
 )
@@ -13,10 +12,16 @@ type CoreHandler struct{}
 func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 
 	// Testing begin
-	var posts []models.Post
-	samplePost := models.Post{"test1", time.Time{}, "test2", "test3", "test4", "test5", "test6", "test7"}
-	for i := 0; i < 5; i++ {
-		posts = append(posts, samplePost)
+	posts := make([]models.Post, 0)
+	hnResp, err := http.Get("http://localhost:4000/v1/posts?count=20")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	err = json.NewDecoder(hnResp.Body).Decode(&posts)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	// Testing end
 
