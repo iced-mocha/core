@@ -4,6 +4,8 @@ services:
     build: .
     ports:
      - "3000:3000"
+    links:
+    - "hacker-news-client:hacker-news"
   hacker-news-client:
     build: ../hacker-news-client
     ports:

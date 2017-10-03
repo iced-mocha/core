@@ -13,7 +13,7 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 
 	// Testing begin
 	posts := make([]models.Post, 0)
-	hnResp, err := http.Get("http://localhost:4000/v1/posts?count=20")
+	hnResp, err := http.Get("http://hacker-news:4000/v1/posts?count=20")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
