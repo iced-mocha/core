@@ -17,5 +17,7 @@ func New(api handlers.CoreAPI) (*Server, error) {
 	// For now lets have core generate a user id and return in respsone body
 	s.Router.HandleFunc("/v1/users", api.InsertUser).Methods("PUT")
 
+	s.Router.HandleFunc("/v1/users/{userID}/authorize/reddit", api.RedditAuth).Methods("GET")
+
 	return s, nil
 }

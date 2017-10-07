@@ -24,6 +24,10 @@ func init() {
 	}
 }
 
+func (api *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "http://localhost:3001/v1/authorize", http.StatusFound)
+}
+
 func (api *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 	// Read body of the request
 	body, err := ioutil.ReadAll(r.Body)
