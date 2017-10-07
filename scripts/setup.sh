@@ -38,8 +38,8 @@ if [ -z ${GOPATH} ]
 	init_database="initDB.sql"
  else 
 	# GOPATH is set
-	database_file="${GOPATH}/src/github.com/icedmocha/core/database.db"
-	init_database="${GOPATH}/src/github.com/icedmocha/core/scripts/initDB.sql"
+	database_file="${GOPATH}/src/github.com/iced-mocha/core/database.db"
+	init_database="${GOPATH}/src/github.com/iced-mocha/core/scripts/initDB.sql"
  fi
 
 # Now lets check if our database file exists so we can prevent accidently overwriting it

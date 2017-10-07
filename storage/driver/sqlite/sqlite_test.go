@@ -1,8 +1,6 @@
 package sqlite
 
 import (
-	"database/sql"
-	_ "github.com/mattn/go-sqlite3"
 	"log"
 	"testing"
 )
@@ -13,9 +11,4 @@ func TestNew(t *testing.T) {
 	if err != nil {
 		log.Fatalf("Unable to create driver: %v\n", err)
 	}
-	/*
-		_, err := sql.Open("sqlite3", "./foo.db")
-		if err != nil {
-			log.Fatalf("Unable to open database: %v", err)
-		}*/
 }

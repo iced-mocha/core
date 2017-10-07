@@ -1,6 +1,7 @@
 CREATE TABLE `UserInfo` (
-	`UserID` INTEGER PRIMARY KEY AUTOINCREMENT,
+	`UserID` VARCHAR(64)  PRIMARY KEY,
 	`Username` VARCHAR(64) NULL,
 	`RedditUserName` VARCHAR(64) NULL,
-	`RedditBearerToken` DATE NULL
+	`RedditAuthToken` VARCHAR(64) NULL,
+	`TokenExpiry` TIMESTAMP NULL
 );
