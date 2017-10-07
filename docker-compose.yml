@@ -1,12 +1,18 @@
 version: '3'
 services:
+  front-end:
+    build: ../front-end
+    ports:
+     - "8080:8080"
   core:
     build: .
     ports:
      - "3000:3000"
-    links:
-    - "hacker-news-client:hacker-news"
   hacker-news-client:
     build: ../hacker-news-client
     ports:
     - "4000:4000"
+  facebook-client:
+    build: ../facebook-client
+    ports:
+    - "5000:5000"
