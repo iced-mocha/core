@@ -2,3 +2,5 @@ vendor
 Gopkg.lock
 .DS_STORE
 *.swp
+# SQLite database files
+*.db
