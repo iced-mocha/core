@@ -5,6 +5,7 @@ RUN go get -u github.com/golang/dep/cmd/dep && go install github.com/golang/dep/
 WORKDIR /go/src/github.com/icedmocha/core
 COPY . /go/src/github.com/icedmocha/core
 
-RUN dep ensure && go install
+RUN dep ensure -v
+RUN go install -v
 
 ENTRYPOINT ["core"]

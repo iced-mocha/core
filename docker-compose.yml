@@ -16,3 +16,7 @@ services:
     build: ../facebook-client
     ports:
     - "5000:5000"
+  reddit-client:
+    build: ../reddit-client
+    ports:
+    - "3001:3001"
