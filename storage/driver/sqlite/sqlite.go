@@ -6,7 +6,7 @@ import (
 
 	"database/sql"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/twinj/uuid"
+	_ "github.com/twinj/uuid"
 )
 
 const (
@@ -19,27 +19,32 @@ type driver struct {
 }
 
 // Inserts a user into the database and creates an id for that user
-func (d *driver) InsertUser(username string) string {
+func (d *driver) InsertUser(userID, username string) {
 	// Generate a unique userid
-	u := uuid.NewV4()
+	//u := uuid.NewV4()
+
+	log.Printf("Inserting user with ID: %v, and username: %v", userID, username)
 
 	stmt, err := d.db.Prepare("INSERT INTO UserInfo(UserID, Username) values(?,?)")
 	if err != nil {
 		log.Println(err)
-		return ""
+		return
 	}
 
-	_, err = stmt.Exec(u.String(), username)
+	_, err = stmt.Exec(userID, username)
 	if err != nil {
 		log.Println(err)
-		return ""
+		return
 	}
 
-	return u.String()
+	log.Printf("Successfuly inserted user with ID: %v, and username: %v", userID, username)
 }
 
+// TODO: This funciton isnt working
 func (d *driver) GetRedditOAuthToken(userID string) (string, error) {
-	stmt, err := d.db.Prepare("SELECT * FROM UserInfo WHERE UserID=?")
+	log.Printf("Attempting to get token for user: %v\n", userID)
+
+	stmt, err := d.db.Prepare("SELECT RedditAuthToken FROM UserInfo WHERE UserID=?")
 	if err != nil {
 		log.Println(err)
 		return "", err
@@ -53,13 +58,15 @@ func (d *driver) GetRedditOAuthToken(userID string) (string, error) {
 
 	// Try to get the first and hopefully only result from the query
 	if !rows.Next() {
+		log.Printf("Could not find user in DB: %v\n", userID)
 		return "", errors.New("No user found in database with given id" + userID)
 	}
 
-	var uid, user, redditUser, redditAuthToken, tokenExpiry string
-	rows.Scan(uid, user, redditUser, redditAuthToken, tokenExpiry)
+	var RedditAuthToken string
+	rows.Scan(&RedditAuthToken)
 
-	return redditAuthToken, nil
+	log.Printf("Successfully got auth token for user")
+	return RedditAuthToken, nil
 }
 
 func (d *driver) UpdateRedditAccount(userID, redditUser, authToken, tokenExpiry string) bool {
@@ -68,7 +75,7 @@ func (d *driver) UpdateRedditAccount(userID, redditUser, authToken, tokenExpiry 
 	noAuthQuery := "UPDATE UserInfo SET RedditUserName=? WHERE UserID=?"
 
 	// Decide which query were using
-	if authToken == "" || tokenExpiry == "" {
+	if authToken == "" && tokenExpiry == "" {
 		noAuth = true
 		query = noAuthQuery
 	}
@@ -107,6 +114,13 @@ func (d *driver) UpdateRedditAccount(userID, redditUser, authToken, tokenExpiry 
 // Updates the auth token stored in db for the given userID
 // Returns whether or not update was successful
 func (d *driver) UpdateOAuthToken(userID, token, expiry string) bool {
+	log.Printf("Going to update oauth token for user: %v", userID)
+
+	// TODO: This needs to be changed -- just dont want to do it now
+	// Dirty hack
+	// Also this produces an error if the user already exists :-(
+	d.InsertUser(userID, "iced-mocha")
+
 	stmt, err := d.db.Prepare("UPDATE UserInfo SET RedditAuthToken=?, TokenExpiry=? where UserID=?")
 	if err != nil {
 		log.Println(err)

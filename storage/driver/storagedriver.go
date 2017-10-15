@@ -1,7 +1,7 @@
 package driver
 
 type StorageDriver interface {
-	InsertUser(username string) string
+	InsertUser(userID, username string)
 
 	GetRedditOAuthToken(userID string) (string, error)
 
