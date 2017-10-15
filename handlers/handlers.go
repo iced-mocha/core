@@ -105,7 +105,7 @@ func (api *CoreHandler) getHackerNewsPosts(c chan PostResponse) {
 	// Create an inital array with the same amount of posts we expect to get from hackernews
 	hnPosts := make([]models.Post, 20)
 
-	hnResp, err := http.Get("http://hacker-news-client:4000/v1/posts?count=20")
+	hnResp, err := http.Get("http://localhost:4000/v1/posts?count=20")
 	if err != nil {
 		c <- PostResponse{hnPosts, fmt.Errorf("Unable to fetch posts from hacker news: %v", err)}
 		return
@@ -117,6 +117,7 @@ func (api *CoreHandler) getHackerNewsPosts(c chan PostResponse) {
 		return
 	}
 
+	log.Println("Successfully retrieved posts from hackernews")
 	c <- PostResponse{hnPosts, nil}
 }
 
@@ -147,6 +148,7 @@ func (api *CoreHandler) getFacebookPosts(query url.Values, c chan PostResponse) 
 		return
 	}
 
+	log.Println("Successfully retrieved posts from facebook")
 	c <- PostResponse{fbPosts, nil}
 }
 
@@ -184,6 +186,7 @@ func (api *CoreHandler) getRedditPosts(c chan PostResponse) {
 		return
 	}
 
+	log.Println("Successfully retrieved posts from reddit")
 	c <- PostResponse{redditPosts, nil}
 }
 
