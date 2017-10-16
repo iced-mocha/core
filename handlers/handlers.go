@@ -132,14 +132,16 @@ func (api *CoreHandler) getFacebookPosts(query url.Values, c chan PostResponse) 
 		fbToken = v[0]
 	}
 
-	fbPosts := make([]models.Post, 0)
+	var fbRespBody models.ClientResp
+	var fbPosts = make([]models.Post, 0)
 	fbResp, err := http.Get("http://facebook-client:5000/v1/posts?fb_id=" + fbId + "&fb_token=" + fbToken)
 	if err != nil {
 		c <- PostResponse{fbPosts, fmt.Errorf("Unable to get posts from facebook: %v", err)}
 		return
 	}
 
-	err = json.NewDecoder(fbResp.Body).Decode(&fbPosts)
+	err = json.NewDecoder(fbResp.Body).Decode(&fbRespBody)
+	fbPosts = fbRespBody.Posts
 	if err != nil {
 		c <- PostResponse{fbPosts, fmt.Errorf("Unable to decode posts from facebook: %v", err)}
 		return
