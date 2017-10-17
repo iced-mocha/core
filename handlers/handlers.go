@@ -70,7 +70,7 @@ func (api *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Request)
 
 func (api *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
 	// Rediret to reddit-client auth
-	http.Redirect(w, r, "http://localhost:3001/v1/authorize", http.StatusFound)
+	http.Redirect(w, r, "http://reddit-client:3001/v1/authorize", http.StatusFound)
 }
 
 func (api *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
@@ -117,6 +117,7 @@ func (api *CoreHandler) getHackerNewsPosts(c chan PostResponse) {
 		return
 	}
 
+	log.Println("Successfully retrieved posts from hackernews")
 	c <- PostResponse{hnPosts, nil}
 }
 
@@ -147,6 +148,7 @@ func (api *CoreHandler) getFacebookPosts(query url.Values, c chan PostResponse) 
 		return
 	}
 
+	log.Println("Successfully retrieved posts from facebook")
 	c <- PostResponse{fbPosts, nil}
 }
 
@@ -166,7 +168,7 @@ func (api *CoreHandler) getRedditPosts(c chan PostResponse) {
 	client := &http.Client{}
 	log.Printf("Token:%v\n", redditToken)
 	jsonString := []byte(fmt.Sprintf("{ \"bearertoken\": \"%v\"}", redditToken))
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://localhost:3001/v1/%v/posts", userID), bytes.NewBuffer(jsonString))
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://reddit-client:3001/v1/%v/posts", userID), bytes.NewBuffer(jsonString))
 	if err != nil {
 		c <- PostResponse{redditPosts, err}
 		return
@@ -174,7 +176,7 @@ func (api *CoreHandler) getRedditPosts(c chan PostResponse) {
 
 	redditResp, err := client.Do(req)
 	if err != nil {
-		c <- PostResponse{redditPosts, fmt.Errorf("Unable to get posts form reddit: %v", err)}
+		c <- PostResponse{redditPosts, fmt.Errorf("Unable to get posts from reddit: %v", err)}
 		return
 	}
 
@@ -184,6 +186,7 @@ func (api *CoreHandler) getRedditPosts(c chan PostResponse) {
 		return
 	}
 
+	log.Println("Successfully retrieved posts from reddit")
 	c <- PostResponse{redditPosts, nil}
 }
 
