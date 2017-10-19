@@ -1,3 +1,4 @@
 .git
 vendor/*
 Gopkg.lock
+database.db
