@@ -8,9 +8,11 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"sort"
 
 	"github.com/gorilla/mux"
 	"github.com/iced-mocha/core/storage/driver"
+	"github.com/iced-mocha/core/comparators"
 	"github.com/iced-mocha/core/storage/driver/sqlite"
 	"github.com/iced-mocha/shared/models"
 )
@@ -225,6 +227,12 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	if r3.err == nil {
 		posts = append(posts, r3.posts...)
 	}
+
+	weights := make(map[string]float64)
+	weights[models.PlatformHackerNews] = 4
+	weights[models.PlatformReddit] = 4
+	weights[models.PlatformFacebook] = 1
+	sort.Sort(comparators.ByPostRank{posts, weights})
 
 	w.Header().Set("Content-Type", "application/json")
 
