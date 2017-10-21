@@ -1,7 +1,6 @@
 package comparators
 
 import (
-	"math"
 	"time"
 
 	"github.com/iced-mocha/shared/models"
@@ -29,11 +28,12 @@ func (s ByPostRank) Less(i, j int) bool {
 func (s ByPostRank) getRank(i int) float64 {
 	p := s.Posts[i]
 	age := time.Since(p.Date)
-
 	weight := 1.0
 	if v, ok := s.PlatformWeights[p.Platform]; ok {
 		weight = v
 	}
 
-	return math.Pow(float64(age), 0.4) * weight
+	dayDuration := time.Duration(24) * time.Hour
+	// a 1 day old post will have double the rank of a new post
+	return float64(i) * weight * (age.Minutes() + dayDuration.Minutes())
 }
