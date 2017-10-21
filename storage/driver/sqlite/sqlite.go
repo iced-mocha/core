@@ -55,6 +55,7 @@ func (d *driver) GetRedditOAuthToken(userID string) (string, error) {
 		log.Println(err)
 		return "", err
 	}
+	defer rows.Close()
 
 	// Try to get the first and hopefully only result from the query
 	if !rows.Next() {
