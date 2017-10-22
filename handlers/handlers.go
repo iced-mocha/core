@@ -62,13 +62,16 @@ func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusOK)
 }
 
+// Redirects to our reddit client to authorize or service to use reddit account
+// GET /v1/user/{userID}/authorize/reddit
 func (handler *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
-	// Rediret to reddit-client auth
 	http.Redirect(w, r, "http://reddit-client:3001/v1/authorize", http.StatusFound)
 }
 
+// Inserts the provided user into the database
+// TODO change this to accept path param of id (i.e. /v1/users/{userID})
+// PUT /v1/users
 func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
-	// Read body of the request
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Error reading body: %v", err)
@@ -76,10 +79,9 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Change the body into a user object
+	// Marshal the body into a user object
 	user := &models.User{}
-	err = json.Unmarshal(body, user)
-	if err != nil {
+	if err := json.Unmarshal(body, user); err != nil {
 		log.Printf("Error parsing body: %v", err)
 		http.Error(w, "can't parse body", http.StatusBadRequest)
 		return
@@ -90,8 +92,6 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 	handler.Driver.InsertUser(userId, user.Name)
 	log.Println("userId: " + userId)
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(userId))
-
 }
 
 // Fetches posts from hackernews
