@@ -13,12 +13,14 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/iced-mocha/core/comparators"
 	"github.com/iced-mocha/core/storage/driver"
-	"github.com/iced-mocha/core/storage/driver/sqlite"
 	"github.com/iced-mocha/shared/models"
 )
 
-type CoreHandler struct{}
+type CoreHandler struct {
+	Driver driver.StorageDriver
+}
 
+// Structur received when updating reddit oauth token
 type RedditAuth struct {
 	User         string
 	BearerToken  string
@@ -31,20 +33,9 @@ type PostResponse struct {
 	err   error
 }
 
-var d driver.StorageDriver
-
-func init() {
-	var err error
-
-	d, err = sqlite.New(sqlite.Config{})
-	if err != nil {
-		log.Printf("Unable to create driver: %v\n", err)
-	}
-}
-
-// Function for updating auth token in datastore
-// /v1/user/{userID}/authorize/reddit POST
-func (api *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Request) {
+// Updates the reddit oauth token stored for a user with id <userID>
+// POST /v1/user/{userID}/authorize/reddit
+func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Request) {
 	// Read body of the request
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -53,12 +44,13 @@ func (api *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	log.Printf("Body: %v\n", string(body))
+
 	// Get the user id from path paramater
-	vars := mux.Vars(r)
+	id := mux.Vars(r)["userID"]
 
 	// Change the body into a user object
 	auth := &RedditAuth{}
-	log.Printf("Body: %v\n", string(body))
 	err = json.Unmarshal(body, auth)
 	if err != nil {
 		log.Printf("Error parsing body: %v", err)
@@ -66,16 +58,16 @@ func (api *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	d.UpdateOAuthToken(vars["userID"], auth.BearerToken, "")
+	handler.Driver.UpdateOAuthToken(id, auth.BearerToken, "")
 	w.WriteHeader(http.StatusOK)
 }
 
-func (api *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
+func (handler *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
 	// Rediret to reddit-client auth
 	http.Redirect(w, r, "http://reddit-client:3001/v1/authorize", http.StatusFound)
 }
 
-func (api *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
+func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 	// Read body of the request
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -95,7 +87,7 @@ func (api *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 
 	// TODO Add userID to be path param
 	userId := "userID"
-	d.InsertUser(userId, user.Name)
+	handler.Driver.InsertUser(userId, user.Name)
 	log.Println("userId: " + userId)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(userId))
@@ -103,7 +95,7 @@ func (api *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // Fetches posts from hackernews
-func (api *CoreHandler) getHackerNewsPosts(c chan PostResponse) {
+func (handler *CoreHandler) getHackerNewsPosts(c chan PostResponse) {
 	// Create an inital array with the same amount of posts we expect to get from hackernews
 	hnPosts := make([]models.Post, 20)
 
@@ -123,7 +115,7 @@ func (api *CoreHandler) getHackerNewsPosts(c chan PostResponse) {
 	c <- PostResponse{hnPosts, nil}
 }
 
-func (api *CoreHandler) getFacebookPosts(query url.Values, c chan PostResponse) {
+func (handler *CoreHandler) getFacebookPosts(query url.Values, c chan PostResponse) {
 	var fbId string
 	var fbToken string
 
@@ -154,14 +146,14 @@ func (api *CoreHandler) getFacebookPosts(query url.Values, c chan PostResponse) 
 	c <- PostResponse{fbPosts, nil}
 }
 
-func (api *CoreHandler) getRedditPosts(c chan PostResponse) {
+func (handler *CoreHandler) getRedditPosts(c chan PostResponse) {
 	// Use this userID until we implement login
 	userID := "userID"
 	redditPosts := make([]models.Post, 0)
 
 	// TODO: Eventually we will first have to check whether this token exists or if it expired
 	// Get our reddit bearer token
-	redditToken, err := d.GetRedditOAuthToken(userID)
+	redditToken, err := handler.Driver.GetRedditOAuthToken(userID)
 	if err != nil || redditToken == "" {
 		c <- PostResponse{redditPosts, fmt.Errorf("Unable to oauth token from database for user: %v: %v", userID, err)}
 		return
@@ -193,16 +185,16 @@ func (api *CoreHandler) getRedditPosts(c chan PostResponse) {
 }
 
 // GET /v1/posts
-func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
+func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 
 	// Make a channel for the various posts we are getting
 	// Right now we have 3 clients to fetch from so we need to block until all 3 complete
 	c := make(chan PostResponse, 3)
 
 	// Get the response from hackernews
-	go api.getHackerNewsPosts(c)
-	go api.getFacebookPosts(r.URL.Query(), c)
-	go api.getRedditPosts(c)
+	go handler.getHackerNewsPosts(c)
+	go handler.getFacebookPosts(r.URL.Query(), c)
+	go handler.getRedditPosts(c)
 
 	// Read all response from channel (we dont really know which is which)
 	r1, r2, r3 := <-c, <-c, <-c

@@ -1,18 +1,24 @@
 package main
 
 import (
-	"github.com/iced-mocha/core/handlers"
-	"github.com/iced-mocha/core/server"
 	"log"
 	"net/http"
+
+	"github.com/iced-mocha/core/handlers"
+	"github.com/iced-mocha/core/server"
+	"github.com/iced-mocha/core/storage/driver/sqlite"
 )
 
 func main() {
-
-	handler := &handlers.CoreHandler{}
-	s, err := server.New(handler)
+	// Create our storage driver
+	driver, err := sqlite.New(sqlite.Config{})
 	if err != nil {
-		log.Fatal("error initializing server: ", err)
+		log.Fatalf("Unable to create driver: %v\n", err)
+	}
+
+	s, err := server.New(&handlers.CoreHandler{driver})
+	if err != nil {
+		log.Fatalf("error initializing server: %v", err)
 	}
 
 	log.Fatal(http.ListenAndServe(":3000", s.Router))
