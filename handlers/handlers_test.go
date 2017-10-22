@@ -43,6 +43,13 @@ func (suite *HandlersTestSuite) TestInsertUser() {
 	suite.router.ServeHTTP(w, r)
 	suite.Equal(http.StatusOK, w.Code)
 
+	// Make sure empty request body results in 400 bad request
+	r, err = http.NewRequest(http.MethodPost, "/v1/users", bytes.NewBufferString(""))
+	suite.Nil(err)
+	w = httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusBadRequest, w.Code)
+
 	// Make sure non JSON body results in 400 bad request
 	r, err = http.NewRequest(http.MethodPost, "/v1/users", bytes.NewBufferString("\"not json\": \"test\"}"))
 	suite.Nil(err)
@@ -59,6 +66,13 @@ func (suite *HandlersTestSuite) TestUpdateRedditAuth() {
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, r)
 	suite.Equal(http.StatusOK, w.Code)
+
+	// Make sure empty request body results in 400 bad request
+	r, err = http.NewRequest(http.MethodPost, "/v1/user/userID/authorize/reddit", bytes.NewBufferString(""))
+	suite.Nil(err)
+	w = httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusBadRequest, w.Code)
 
 	// Make sure non JSON body results in 400 bad request
 	r, err = http.NewRequest(http.MethodPost, "/v1/user/userID/authorize/reddit", bytes.NewBufferString("\"not json\"}"))
