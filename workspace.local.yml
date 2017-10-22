@@ -1,0 +1,11 @@
+---
+# Configuration for our individual clients
+facebook:
+    host: "localhost"
+    port: 5000
+reddit:
+    host: "localhost"
+    port: 3001
+hacker-news:
+    host: "localhost"
+    port: 4000
