@@ -276,7 +276,7 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	weights[models.PlatformHackerNews] = 4
 	weights[models.PlatformReddit] = 4
 	weights[models.PlatformFacebook] = 1
-	weights[models.PlatformGoogleNews] = 0.5
+	weights[models.PlatformGoogleNews] = 8
 	sort.Sort(comparators.ByPostRank{posts, weights})
 
 	w.Header().Set("Content-Type", "application/json")
