@@ -34,6 +34,7 @@ func (s ByPostRank) getRank(i int) float64 {
 	}
 
 	dayDuration := time.Duration(24) * time.Hour
-	// a 1 day old post will have double the rank of a new post
-	return float64(i) * weight * (age.Minutes() + dayDuration.Minutes())
+	ageMultiplier := (age.Minutes() + dayDuration.Minutes())
+	posMultiplier := float64(i + 10)
+	return posMultiplier * weight * ageMultiplier
 }
