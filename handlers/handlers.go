@@ -288,6 +288,25 @@ func (handler *CoreHandler) getRedditPosts(c chan PostResponse) {
 	c <- PostResponse{redditPosts, nil}
 }
 
+func (handler *CoreHandler) getGoogleNewsPosts(c chan PostResponse) {
+	gnPosts := make([]models.Post, 0, 0)
+
+	gnResp, err := http.Get(fmt.Sprintf("http://%v:%v/v1/posts?count=20", handler.gnHost, handler.gnPort))
+	if err != nil {
+		c <- PostResponse{gnPosts, fmt.Errorf("Unable to fetch posts from google news: %v", err)}
+		return
+	}
+
+	err = json.NewDecoder(gnResp.Body).Decode(&gnPosts)
+	if err != nil {
+		c <- PostResponse{gnPosts, fmt.Errorf("Unable to decode response from google-news: %v", err)}
+		return
+	}
+
+	log.Println("Successfully retrieved posts from googlenews")
+	c <- PostResponse{gnPosts, nil}
+}
+
 // GET /v1/posts
 func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 
@@ -299,14 +318,15 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	go handler.getHackerNewsPosts(c)
 	go handler.getFacebookPosts(r.URL.Query(), c)
 	go handler.getRedditPosts(c)
+	go handler.getGoogleNewsPosts(c)
 
 	// Read all response from channel (we dont really know which is which)
-	r1, r2, r3 := <-c, <-c, <-c
+	r1, r2, r3, r4 := <-c, <-c, <-c, <-c
 
 	// Error check based on the responses from each of of request
-	if r1.err != nil && r2.err != nil && r3.err != nil {
+	if r1.err != nil && r2.err != nil && r3.err != nil && r4.err != nil {
 		http.Error(w, "Could not receive posts from any of our client", http.StatusInternalServerError)
-		log.Printf("Errors:\n %v \n %v \n %v", r1.err, r2.err, r3.err)
+		log.Printf("Errors:\n %v \n %v \n %v \n %v", r1.err, r2.err, r3.err, r4.err)
 		return
 	}
 
@@ -323,11 +343,15 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	if r3.err == nil {
 		posts = append(posts, r3.posts...)
 	}
+	if r4.err == nil {
+		posts = append(posts, r4.posts...)
+	}
 
 	weights := make(map[string]float64)
 	weights[models.PlatformHackerNews] = 4
 	weights[models.PlatformReddit] = 4
 	weights[models.PlatformFacebook] = 1
+	weights[models.PlatformGoogleNews] = 8
 	sort.Sort(comparators.ByPostRank{posts, weights})
 
 	w.Header().Set("Content-Type", "application/json")
