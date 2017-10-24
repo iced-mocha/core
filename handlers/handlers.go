@@ -12,12 +12,17 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/iced-mocha/core/comparators"
+	"github.com/iced-mocha/core/config"
 	"github.com/iced-mocha/core/storage/driver"
 	"github.com/iced-mocha/shared/models"
 )
 
 type CoreHandler struct {
 	Driver driver.StorageDriver
+	Config config.Config
+
+	redditHost, facebookHost, hnHost string
+	redditPort, facebookPort, hnPort int
 }
 
 // Structur received when updating reddit oauth token
@@ -31,6 +36,30 @@ type RedditAuth struct {
 type PostResponse struct {
 	posts []models.Post
 	err   error
+}
+
+func New(d driver.StorageDriver, c config.Config) (*CoreHandler, error) {
+	handler := &CoreHandler{}
+	handler.Driver = d
+	handler.Config = c
+
+	// TODO Find a better way to do this
+	// Maybe create a GetStringKeys function that returns array of values and a potential error
+
+	hosts, err := handler.Config.GetStrings([]string{"hacker-news.host", "facebook.host", "reddit.host"})
+	if err != nil {
+		return nil, err
+	}
+
+	ports, err := handler.Config.GetInts([]string{"hacker-news.port", "facebook.port", "reddit.port"})
+	if err != nil {
+		return nil, err
+	}
+
+	handler.hnHost, handler.facebookHost, handler.redditHost = hosts[0], hosts[1], hosts[2]
+	handler.hnPort, handler.facebookPort, handler.redditPort = ports[0], ports[1], ports[2]
+
+	return handler, nil
 }
 
 // Updates the reddit oauth token stored for a user with id <userID>
@@ -99,7 +128,7 @@ func (handler *CoreHandler) getHackerNewsPosts(c chan PostResponse) {
 	// Create an inital array with the same amount of posts we expect to get from hackernews
 	hnPosts := make([]models.Post, 20)
 
-	hnResp, err := http.Get("http://hacker-news-client:4000/v1/posts?count=20")
+	hnResp, err := http.Get(fmt.Sprintf("http://%v:%v/v1/posts?count=20", handler.hnHost, handler.hnPort))
 	if err != nil {
 		c <- PostResponse{hnPosts, fmt.Errorf("Unable to fetch posts from hacker news: %v", err)}
 		return
@@ -129,7 +158,7 @@ func (handler *CoreHandler) getFacebookPosts(query url.Values, c chan PostRespon
 
 	var fbRespBody models.ClientResp
 	var fbPosts = make([]models.Post, 0)
-	fbResp, err := http.Get("http://facebook-client:5000/v1/posts?fb_id=" + fbId + "&fb_token=" + fbToken)
+	fbResp, err := http.Get(fmt.Sprintf("http://%v:%v/v1/posts?fb_id=%v&fb_token=%v", handler.facebookHost, handler.facebookPort, fbId, fbToken))
 	if err != nil {
 		c <- PostResponse{fbPosts, fmt.Errorf("Unable to get posts from facebook: %v", err)}
 		return
@@ -162,7 +191,7 @@ func (handler *CoreHandler) getRedditPosts(c chan PostResponse) {
 	client := &http.Client{}
 	log.Printf("Token:%v\n", redditToken)
 	jsonString := []byte(fmt.Sprintf("{ \"bearertoken\": \"%v\"}", redditToken))
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://reddit-client:3001/v1/%v/posts", userID), bytes.NewBuffer(jsonString))
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%v:%v/v1/%v/posts", handler.redditHost, handler.redditPort, userID), bytes.NewBuffer(jsonString))
 	if err != nil {
 		c <- PostResponse{redditPosts, err}
 		return

@@ -1,6 +1,8 @@
 package config
 
 type Config interface {
-	GetString(key string) string
-	GetInt(key string) int
+	GetStrings(keys []string) ([]string, error)
+	GetString(key string) (string, error)
+	GetInts(keys []string) ([]int, error)
+	GetInt(key string) (int, error)
 }

@@ -2,3 +2,4 @@
 vendor/*
 Gopkg.lock
 database.db
+workspace.local.yml

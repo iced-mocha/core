@@ -27,7 +27,7 @@ func (suite *HandlersTestSuite) SetupSuite() {
 	// Disable logging while testing
 	log.SetOutput(ioutil.Discard)
 
-	suite.handler = CoreHandler{&MockDriver{}}
+	suite.handler = CoreHandler{Driver: &MockDriver{}}
 
 	// In order to test using path params we need to run a server and send requests to it
 	suite.router = mux.NewRouter()
