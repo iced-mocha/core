@@ -9,3 +9,6 @@ reddit:
 hacker-news:
     host: "localhost"
     port: 4000
+google-news:
+    host: "localhost"
+    port: 7000

@@ -9,3 +9,6 @@ reddit:
 hacker-news:
     host: "hacker-news-client"
     port: 4000
+google-news:
+    host: "google-news-client"
+    port: 7000

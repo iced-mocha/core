@@ -21,8 +21,8 @@ type CoreHandler struct {
 	Driver driver.StorageDriver
 	Config config.Config
 
-	redditHost, facebookHost, hnHost string
-	redditPort, facebookPort, hnPort int
+	redditHost, facebookHost, hnHost, gnHost string
+	redditPort, facebookPort, hnPort, gnPort int
 }
 
 // Structur received when updating reddit oauth token
@@ -46,18 +46,18 @@ func New(d driver.StorageDriver, c config.Config) (*CoreHandler, error) {
 	// TODO Find a better way to do this
 	// Maybe create a GetStringKeys function that returns array of values and a potential error
 
-	hosts, err := handler.Config.GetStrings([]string{"hacker-news.host", "facebook.host", "reddit.host"})
+	hosts, err := handler.Config.GetStrings([]string{"hacker-news.host", "facebook.host", "reddit.host", "google-news.host"})
 	if err != nil {
 		return nil, err
 	}
 
-	ports, err := handler.Config.GetInts([]string{"hacker-news.port", "facebook.port", "reddit.port"})
+	ports, err := handler.Config.GetInts([]string{"hacker-news.port", "facebook.port", "reddit.port", "google-news.port"})
 	if err != nil {
 		return nil, err
 	}
 
-	handler.hnHost, handler.facebookHost, handler.redditHost = hosts[0], hosts[1], hosts[2]
-	handler.hnPort, handler.facebookPort, handler.redditPort = ports[0], ports[1], ports[2]
+	handler.hnHost, handler.facebookHost, handler.redditHost, handler.gnHost = hosts[0], hosts[1], hosts[2], hosts[3]
+	handler.hnPort, handler.facebookPort, handler.redditPort, handler.gnPort = ports[0], ports[1], ports[2], ports[3]
 
 	return handler, nil
 }
@@ -213,6 +213,25 @@ func (handler *CoreHandler) getRedditPosts(c chan PostResponse) {
 	c <- PostResponse{redditPosts, nil}
 }
 
+func (handler *CoreHandler) getGoogleNewsPosts(c chan PostResponse) {
+	gnPosts := make([]models.Post, 0, 0)
+
+	gnResp, err := http.Get(fmt.Sprintf("http://%v:%v/v1/posts?count=20", handler.gnHost, handler.gnPort))
+	if err != nil {
+		c <- PostResponse{gnPosts, fmt.Errorf("Unable to fetch posts from google news: %v", err)}
+		return
+	}
+
+	err = json.NewDecoder(gnResp.Body).Decode(&gnPosts)
+	if err != nil {
+		c <- PostResponse{gnPosts, fmt.Errorf("Unable to decode response from google-news: %v", err)}
+		return
+	}
+
+	log.Println("Successfully retrieved posts from googlenews")
+	c <- PostResponse{gnPosts, nil}
+}
+
 // GET /v1/posts
 func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 
@@ -224,14 +243,15 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	go handler.getHackerNewsPosts(c)
 	go handler.getFacebookPosts(r.URL.Query(), c)
 	go handler.getRedditPosts(c)
+	go handler.getGoogleNewsPosts(c)
 
 	// Read all response from channel (we dont really know which is which)
-	r1, r2, r3 := <-c, <-c, <-c
+	r1, r2, r3, r4 := <-c, <-c, <-c, <-c
 
 	// Error check based on the responses from each of of request
-	if r1.err != nil && r2.err != nil && r3.err != nil {
+	if r1.err != nil && r2.err != nil && r3.err != nil && r4.err != nil {
 		http.Error(w, "Could not receive posts from any of our client", http.StatusInternalServerError)
-		log.Printf("Errors:\n %v \n %v \n %v", r1.err, r2.err, r3.err)
+		log.Printf("Errors:\n %v \n %v \n %v \n %v", r1.err, r2.err, r3.err, r4.err)
 		return
 	}
 
@@ -248,11 +268,15 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	if r3.err == nil {
 		posts = append(posts, r3.posts...)
 	}
+	if r4.err == nil {
+		posts = append(posts, r4.posts...)
+	}
 
 	weights := make(map[string]float64)
 	weights[models.PlatformHackerNews] = 4
 	weights[models.PlatformReddit] = 4
 	weights[models.PlatformFacebook] = 1
+	weights[models.PlatformGoogleNews] = 0.5
 	sort.Sort(comparators.ByPostRank{posts, weights})
 
 	w.Header().Set("Content-Type", "application/json")

@@ -20,3 +20,9 @@ services:
     build: ../reddit-client
     ports:
     - "3001:3001"
+  google-news-client:
+    build: ../google-news-client
+    ports:
+    - "7000:7000"
+    env_file:
+    - ../google-news-client/workspace.env

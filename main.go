@@ -35,7 +35,7 @@ func main() {
 	// Create our handler
 	handler, err := handlers.New(driver, config)
 	if err != nil {
-		log.Fatalf("Unable to create handler\n")
+		log.Fatalf("Unable to create handler\n", err)
 	}
 
 	s, err := server.New(handler)
