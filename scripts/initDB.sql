@@ -3,5 +3,5 @@ CREATE TABLE `UserInfo` (
 	`Username` VARCHAR(64) NULL,
 	`RedditUserName` VARCHAR(64) NULL,
 	`RedditAuthToken` VARCHAR(64) NULL,
-	`TokenExpiry` TIMESTAMP NULL
+	`RedditTokenExpiry` TIMESTAMP NULL
 );

@@ -1,7 +1,11 @@
 package driver
 
+import (
+	"github.com/iced-mocha/shared/models"
+)
+
 type StorageDriver interface {
-	InsertUser(userID, username string)
+	InsertUser(models.User) error
 
 	GetRedditOAuthToken(userID string) (string, error)
 

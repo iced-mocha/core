@@ -15,6 +15,7 @@ import (
 	"github.com/iced-mocha/core/config"
 	"github.com/iced-mocha/core/storage/driver"
 	"github.com/iced-mocha/shared/models"
+	"github.com/satori/go.uuid"
 )
 
 type CoreHandler struct {
@@ -98,7 +99,6 @@ func (handler *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
 }
 
 // Inserts the provided user into the database
-// TODO change this to accept path param of id (i.e. /v1/users/{userID})
 // PUT /v1/users
 func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
@@ -116,10 +116,14 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO Add userID to be path param
-	userId := "userID"
-	handler.Driver.InsertUser(userId, user.Name)
-	log.Println("userId: " + userId)
+	// TODO Verify username is unique
+
+	// We must insert a custom generate UUID into the user
+	user.ID = uuid.NewV4().String()
+
+	//userId := "userID"
+	handler.Driver.InsertUser(*user)
+	log.Println("userId: " + user.ID)
 	w.WriteHeader(http.StatusOK)
 }
 

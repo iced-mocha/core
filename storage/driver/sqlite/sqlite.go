@@ -1,10 +1,11 @@
 package sqlite
 
 import (
+	"database/sql"
 	"errors"
 	"log"
 
-	"database/sql"
+	"github.com/iced-mocha/shared/models"
 	_ "github.com/mattn/go-sqlite3"
 	_ "github.com/twinj/uuid"
 )
@@ -19,28 +20,26 @@ type driver struct {
 }
 
 // Inserts a user into the database and creates an id for that user
-func (d *driver) InsertUser(userID, username string) {
-	// Generate a unique userid
-	//u := uuid.NewV4()
+func (d *driver) InsertUser(user models.User) error {
+	log.Printf("Inserting user with ID: %v, and username: %v", user.ID, user.Username)
 
-	log.Printf("Inserting user with ID: %v, and username: %v", userID, username)
-
-	stmt, err := d.db.Prepare("INSERT INTO UserInfo(UserID, Username) values(?,?)")
+	stmt, err := d.db.Prepare("INSERT INTO UserInfo(UserID, Username, RedditUserName) values(?,?,?)")
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 
-	_, err = stmt.Exec(userID, username)
+	_, err = stmt.Exec(user.ID, user.Username, user.RedditUser)
 	if err != nil {
 		log.Println(err)
-		return
+		return err
 	}
 
-	log.Printf("Successfuly inserted user with ID: %v, and username: %v", userID, username)
+	log.Printf("Successfuly inserted user with ID: %v, and username: %v", user.ID, user.Username)
+	return nil
 }
 
-// TODO: This funciton isnt working
+// TODO: This funciton isnt working -- why do i write this and not say how its not working
 func (d *driver) GetRedditOAuthToken(userID string) (string, error) {
 	log.Printf("Attempting to get token for user: %v\n", userID)
 
@@ -55,6 +54,7 @@ func (d *driver) GetRedditOAuthToken(userID string) (string, error) {
 		log.Println(err)
 		return "", err
 	}
+	// This is need to prevent database locking
 	defer rows.Close()
 
 	// Try to get the first and hopefully only result from the query
@@ -70,6 +70,33 @@ func (d *driver) GetRedditOAuthToken(userID string) (string, error) {
 	return RedditAuthToken, nil
 }
 
+// This function consumes a user name and sees if it already exists in the database
+func (d *driver) UsernameExists(username string) (bool, error) {
+	// This query will have a result set of 0 or 1.. 1 means Username already exists
+	stmt, err := d.db.Prepare("SELECT 1 FROM UserInfo WHERE Username=?")
+	if err != nil {
+		log.Println(err)
+		return false, err
+	}
+
+	rows, err := stmt.Query(username)
+	if err != nil {
+		log.Println(err)
+		return false, err
+	}
+	// This is need to prevent database locking
+	defer rows.Close()
+
+	// If there is no rows.Next() Username is available to use
+	if !rows.Next() {
+		return false, nil
+	}
+
+	// Otherwise the username does exist
+	return true, nil
+}
+
+// Updates information about a reddit account for a given userID
 func (d *driver) UpdateRedditAccount(userID, redditUser, authToken, tokenExpiry string) bool {
 	noAuth := false
 	query := "UPDATE UserInfo SET RedditUserName=?, RedditAuthToken=?, TokenExpiry=? where UserID=?"
@@ -120,7 +147,10 @@ func (d *driver) UpdateOAuthToken(userID, token, expiry string) bool {
 	// TODO: This needs to be changed -- just dont want to do it now
 	// Dirty hack
 	// Also this produces an error if the user already exists :-(
-	d.InsertUser(userID, "iced-mocha")
+
+	// TODO -- to fix this we need a sign up button on front-end to trigger an insert user
+	// Then after words logging in via reddit will work
+	//d.InsertUser(userID, "iced-mocha")
 
 	stmt, err := d.db.Prepare("UPDATE UserInfo SET RedditAuthToken=?, TokenExpiry=? where UserID=?")
 	if err != nil {
