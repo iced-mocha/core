@@ -42,6 +42,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("error initializing server: %v", err)
 	}
-
-	log.Fatal(http.ListenAndServe(":3000", s.Router))
+	http.Handle("/", s)
+	http.ListenAndServe(":3000", nil)
 }

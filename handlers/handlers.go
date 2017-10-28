@@ -47,18 +47,18 @@ func New(d driver.StorageDriver, c config.Config) (*CoreHandler, error) {
 	// TODO Find a better way to do this
 	// Maybe create a GetStringKeys function that returns array of values and a potential error
 
-	hosts, err := handler.Config.GetStrings([]string{"hacker-news.host", "facebook.host", "reddit.host", "google-news.host"})
+	hosts, err := handler.Config.GetStrings([]string{"hacker-news.host", "facebook.host", "reddit.host"})
 	if err != nil {
 		return nil, err
 	}
 
-	ports, err := handler.Config.GetInts([]string{"hacker-news.port", "facebook.port", "reddit.port", "google-news.port"})
+	ports, err := handler.Config.GetInts([]string{"hacker-news.port", "facebook.port", "reddit.port"})
 	if err != nil {
 		return nil, err
 	}
 
-	handler.hnHost, handler.facebookHost, handler.redditHost, handler.gnHost = hosts[0], hosts[1], hosts[2], hosts[3]
-	handler.hnPort, handler.facebookPort, handler.redditPort, handler.gnPort = ports[0], ports[1], ports[2], ports[3]
+	handler.hnHost, handler.facebookHost, handler.redditHost = hosts[0], hosts[1], hosts[2]
+	handler.hnPort, handler.facebookPort, handler.redditPort = ports[0], ports[1], ports[2]
 
 	return handler, nil
 }
@@ -101,6 +101,7 @@ func (handler *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
 // Inserts the provided user into the database
 // PUT /v1/users
 func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Error reading body: %v", err)
@@ -181,21 +182,21 @@ func (handler *CoreHandler) getFacebookPosts(query url.Values, c chan PostRespon
 
 func (handler *CoreHandler) getRedditPosts(c chan PostResponse) {
 	// Use this userID until we implement login
-	userID := "userID"
+	username := "userID"
 	redditPosts := make([]models.Post, 0)
 
 	// TODO: Eventually we will first have to check whether this token exists or if it expired
 	// Get our reddit bearer token
-	redditToken, err := handler.Driver.GetRedditOAuthToken(userID)
+	redditToken, err := handler.Driver.GetRedditOAuthToken(username)
 	if err != nil || redditToken == "" {
-		c <- PostResponse{redditPosts, fmt.Errorf("Unable to oauth token from database for user: %v: %v", userID, err)}
+		c <- PostResponse{redditPosts, fmt.Errorf("Unable to retrieve oauth token from database for user: %v\n Error:  %v", username, err)}
 		return
 	}
 
 	client := &http.Client{}
 	log.Printf("Token:%v\n", redditToken)
 	jsonString := []byte(fmt.Sprintf("{ \"bearertoken\": \"%v\"}", redditToken))
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%v:%v/v1/%v/posts", handler.redditHost, handler.redditPort, userID), bytes.NewBuffer(jsonString))
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%v:%v/v1/%v/posts", handler.redditHost, handler.redditPort, username), bytes.NewBuffer(jsonString))
 	if err != nil {
 		c <- PostResponse{redditPosts, err}
 		return
@@ -217,25 +218,6 @@ func (handler *CoreHandler) getRedditPosts(c chan PostResponse) {
 	c <- PostResponse{redditPosts, nil}
 }
 
-func (handler *CoreHandler) getGoogleNewsPosts(c chan PostResponse) {
-	gnPosts := make([]models.Post, 0, 0)
-
-	gnResp, err := http.Get(fmt.Sprintf("http://%v:%v/v1/posts?count=20", handler.gnHost, handler.gnPort))
-	if err != nil {
-		c <- PostResponse{gnPosts, fmt.Errorf("Unable to fetch posts from google news: %v", err)}
-		return
-	}
-
-	err = json.NewDecoder(gnResp.Body).Decode(&gnPosts)
-	if err != nil {
-		c <- PostResponse{gnPosts, fmt.Errorf("Unable to decode response from google-news: %v", err)}
-		return
-	}
-
-	log.Println("Successfully retrieved posts from googlenews")
-	c <- PostResponse{gnPosts, nil}
-}
-
 // GET /v1/posts
 func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 
@@ -247,15 +229,14 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	go handler.getHackerNewsPosts(c)
 	go handler.getFacebookPosts(r.URL.Query(), c)
 	go handler.getRedditPosts(c)
-	go handler.getGoogleNewsPosts(c)
 
 	// Read all response from channel (we dont really know which is which)
-	r1, r2, r3, r4 := <-c, <-c, <-c, <-c
+	r1, r2, r3 := <-c, <-c, <-c
 
 	// Error check based on the responses from each of of request
-	if r1.err != nil && r2.err != nil && r3.err != nil && r4.err != nil {
+	if r1.err != nil && r2.err != nil && r3.err != nil {
 		http.Error(w, "Could not receive posts from any of our client", http.StatusInternalServerError)
-		log.Printf("Errors:\n %v \n %v \n %v \n %v", r1.err, r2.err, r3.err, r4.err)
+		log.Printf("Errors:\n %v \n %v \n %v", r1.err, r2.err, r3.err)
 		return
 	}
 
@@ -272,15 +253,11 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	if r3.err == nil {
 		posts = append(posts, r3.posts...)
 	}
-	if r4.err == nil {
-		posts = append(posts, r4.posts...)
-	}
 
 	weights := make(map[string]float64)
 	weights[models.PlatformHackerNews] = 4
 	weights[models.PlatformReddit] = 4
 	weights[models.PlatformFacebook] = 1
-	weights[models.PlatformGoogleNews] = 8
 	sort.Sort(comparators.ByPostRank{posts, weights})
 
 	w.Header().Set("Content-Type", "application/json")

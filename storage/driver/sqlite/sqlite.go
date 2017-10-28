@@ -40,16 +40,16 @@ func (d *driver) InsertUser(user models.User) error {
 }
 
 // TODO: This funciton isnt working -- why do i write this and not say how its not working
-func (d *driver) GetRedditOAuthToken(userID string) (string, error) {
-	log.Printf("Attempting to get token for user: %v\n", userID)
+func (d *driver) GetRedditOAuthToken(username string) (string, error) {
+	log.Printf("Attempting to get reddit token for user: %v\n", username)
 
-	stmt, err := d.db.Prepare("SELECT RedditAuthToken FROM UserInfo WHERE UserID=?")
+	stmt, err := d.db.Prepare("SELECT RedditAuthToken FROM UserInfo WHERE Username=?")
 	if err != nil {
 		log.Println(err)
 		return "", err
 	}
 
-	rows, err := stmt.Query(userID)
+	rows, err := stmt.Query(username)
 	if err != nil {
 		log.Println(err)
 		return "", err
@@ -59,14 +59,14 @@ func (d *driver) GetRedditOAuthToken(userID string) (string, error) {
 
 	// Try to get the first and hopefully only result from the query
 	if !rows.Next() {
-		log.Printf("Could not find user in DB: %v\n", userID)
-		return "", errors.New("No user found in database with given id" + userID)
+		log.Printf("Could not find user in DB: %v\n", username)
+		return "", errors.New("No user found in database with given username: " + username)
 	}
 
 	var RedditAuthToken string
 	rows.Scan(&RedditAuthToken)
 
-	log.Printf("Successfully got auth token for user")
+	log.Printf("Successfully got auth token: %v for user %v.", RedditAuthToken, username)
 	return RedditAuthToken, nil
 }
 
@@ -97,10 +97,10 @@ func (d *driver) UsernameExists(username string) (bool, error) {
 }
 
 // Updates information about a reddit account for a given userID
-func (d *driver) UpdateRedditAccount(userID, redditUser, authToken, tokenExpiry string) bool {
+func (d *driver) UpdateRedditAccount(username, redditUser, authToken, tokenExpiry string) bool {
 	noAuth := false
-	query := "UPDATE UserInfo SET RedditUserName=?, RedditAuthToken=?, TokenExpiry=? where UserID=?"
-	noAuthQuery := "UPDATE UserInfo SET RedditUserName=? WHERE UserID=?"
+	query := "UPDATE UserInfo SET RedditUserName=?, RedditAuthToken=?, TokenExpiry=? where Username=?"
+	noAuthQuery := "UPDATE UserInfo SET RedditUserName=? WHERE Username=?"
 
 	// Decide which query were using
 	if authToken == "" && tokenExpiry == "" {
@@ -118,9 +118,9 @@ func (d *driver) UpdateRedditAccount(userID, redditUser, authToken, tokenExpiry 
 
 	// Determine from before which is the proper statement to execute
 	if noAuth {
-		res, err = stmt.Exec(redditUser, userID)
+		res, err = stmt.Exec(redditUser, username)
 	} else {
-		res, err = stmt.Exec(redditUser, authToken, tokenExpiry, userID)
+		res, err = stmt.Exec(redditUser, authToken, tokenExpiry, username)
 	}
 
 	if err != nil {
@@ -141,24 +141,18 @@ func (d *driver) UpdateRedditAccount(userID, redditUser, authToken, tokenExpiry 
 
 // Updates the auth token stored in db for the given userID
 // Returns whether or not update was successful
-func (d *driver) UpdateOAuthToken(userID, token, expiry string) bool {
-	log.Printf("Going to update oauth token for user: %v", userID)
+// TODO: Rename function or generalize
+func (d *driver) UpdateOAuthToken(username, token, expiry string) bool {
+	log.Printf("Going to update oauth token for user: %v", username)
 
-	// TODO: This needs to be changed -- just dont want to do it now
-	// Dirty hack
-	// Also this produces an error if the user already exists :-(
-
-	// TODO -- to fix this we need a sign up button on front-end to trigger an insert user
-	// Then after words logging in via reddit will work
-	//d.InsertUser(userID, "iced-mocha")
-
-	stmt, err := d.db.Prepare("UPDATE UserInfo SET RedditAuthToken=?, TokenExpiry=? where UserID=?")
+	// TODO: If no records are updated we are not logging an error/message
+	stmt, err := d.db.Prepare("UPDATE UserInfo SET RedditAuthToken=?, RedditTokenExpiry=? where Username=?")
 	if err != nil {
 		log.Println(err)
 		return false
 	}
 
-	res, err := stmt.Exec(token, expiry, userID)
+	res, err := stmt.Exec(token, expiry, username)
 	if err != nil {
 		log.Println(err)
 		return false
