@@ -47,18 +47,18 @@ func New(d driver.StorageDriver, c config.Config) (*CoreHandler, error) {
 	// TODO Find a better way to do this
 	// Maybe create a GetStringKeys function that returns array of values and a potential error
 
-	hosts, err := handler.Config.GetStrings([]string{"hacker-news.host", "facebook.host", "reddit.host"})
+	hosts, err := handler.Config.GetStrings([]string{"hacker-news.host", "facebook.host", "reddit.host", "google-news.host"})
 	if err != nil {
 		return nil, err
 	}
 
-	ports, err := handler.Config.GetInts([]string{"hacker-news.port", "facebook.port", "reddit.port"})
+	ports, err := handler.Config.GetInts([]string{"hacker-news.port", "facebook.port", "reddit.port", "google-news.port"})
 	if err != nil {
 		return nil, err
 	}
 
-	handler.hnHost, handler.facebookHost, handler.redditHost = hosts[0], hosts[1], hosts[2]
-	handler.hnPort, handler.facebookPort, handler.redditPort = ports[0], ports[1], ports[2]
+	handler.hnHost, handler.facebookHost, handler.redditHost, handler.gnHost = hosts[0], hosts[1], hosts[2], hosts[3]
+	handler.hnPort, handler.facebookPort, handler.redditPort, handler.gnPort = ports[0], ports[1], ports[2], ports[3]
 
 	return handler, nil
 }
@@ -101,6 +101,7 @@ func (handler *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
 // Inserts the provided user into the database
 // PUT /v1/users
 func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
+	// TODO: dont think the below line is needed any more
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -108,6 +109,8 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "can't read body", http.StatusBadRequest)
 		return
 	}
+
+	log.Printf("Received the following user to insert: %v", string(body))
 
 	// Marshal the body into a user object
 	user := &models.User{}
