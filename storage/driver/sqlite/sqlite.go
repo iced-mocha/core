@@ -19,17 +19,18 @@ type driver struct {
 	db *sql.DB
 }
 
-// Inserts a user into the database and creates an id for that user
+// Inserts a user into the database
+// NOTE: This assumes the password of the user object has already been hashed
 func (d *driver) InsertUser(user models.User) error {
 	log.Printf("Inserting user with ID: %v, and username: %v", user.ID, user.Username)
 
-	stmt, err := d.db.Prepare("INSERT INTO UserInfo(UserID, Username, RedditUserName) values(?,?,?)")
+	stmt, err := d.db.Prepare("INSERT INTO UserInfo(UserID, Username, Password, RedditUserName) values(?,?,?,?)")
 	if err != nil {
-		log.Println(err)
+		log.Printf("Unable to prepare statement: %v", err)
 		return err
 	}
 
-	_, err = stmt.Exec(user.ID, user.Username, user.RedditUser)
+	_, err = stmt.Exec(user.ID, user.Username, user.Password, user.RedditUsername)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -39,7 +40,6 @@ func (d *driver) InsertUser(user models.User) error {
 	return nil
 }
 
-// TODO: This funciton isnt working -- why do i write this and not say how its not working
 func (d *driver) GetRedditOAuthToken(username string) (string, error) {
 	log.Printf("Attempting to get reddit token for user: %v\n", username)
 
@@ -68,6 +68,42 @@ func (d *driver) GetRedditOAuthToken(username string) (string, error) {
 
 	log.Printf("Successfully got auth token: %v for user %v.", RedditAuthToken, username)
 	return RedditAuthToken, nil
+}
+
+// Attempts to get the user with the given username from the database
+// Returns the user (if any), whether or not that user exists (bool) and a potential error
+func (d *driver) GetUser(username string) (models.User, bool, error) {
+	var user models.User = models.User{}
+
+	// This query will have a result set of 0 or 1.. 1 means Username already exists
+	stmt, err := d.db.Prepare("SELECT * FROM UserInfo WHERE Username=?")
+	if err != nil {
+		log.Printf("Error preparing statement: %v", err)
+		return user, false, err
+	}
+
+	rows, err := stmt.Query(username)
+	if err != nil {
+		log.Printf("Error completing query: %v", err)
+		return user, false, err
+	}
+	// This is need to prevent database locking
+	defer rows.Close()
+
+	// If there is no rows.Next() Username does not exist
+	if !rows.Next() {
+		return user, false, nil
+	}
+
+	// Scan the select Row into our user struct
+	// NOTE: It is import that this is kept up to date with database schema
+	rows.Scan(&user.ID, &user.Username, &user.Password, &user.RedditUsername, &user.RedditAuthToken, &user.RedditTokenExpiry)
+
+	log.Printf("User retrieved user with username: %v", username)
+
+	// Otherwise the username does exist
+	return user, true, nil
+
 }
 
 // This function consumes a user name and sees if it already exists in the database

@@ -16,6 +16,7 @@ import (
 	"github.com/iced-mocha/core/storage/driver"
 	"github.com/iced-mocha/shared/models"
 	"github.com/satori/go.uuid"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type CoreHandler struct {
@@ -26,7 +27,7 @@ type CoreHandler struct {
 	redditPort, facebookPort, hnPort, gnPort int
 }
 
-// Structur received when updating reddit oauth token
+// Structure received when updating reddit oauth token
 type RedditAuth struct {
 	User         string
 	BearerToken  string
@@ -98,7 +99,68 @@ func (handler *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "http://reddit-client:3001/v1/authorize", http.StatusFound)
 }
 
+// Consumes plaintext password and hashes using bcrypt
+func HashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
+	return string(bytes), err
+}
+
+// User for authenticating login to compare password and hash
+func CheckPasswordHash(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
+}
+
+func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Error reading body: %v", err)
+		http.Error(w, "can't read body", http.StatusBadRequest)
+		return
+	}
+
+	// NOTE: We expect a user object but username and password are all that will be non-empty
+	log.Printf("Received the following user to login: %v", string(body))
+
+	// Marshal the body into a user object
+	attemptedUser := &models.User{}
+	if err := json.Unmarshal(body, attemptedUser); err != nil {
+		log.Printf("Error parsing body: %v", err)
+		http.Error(w, "can't parse body", http.StatusBadRequest)
+		return
+	}
+
+	// Get the actual user for the given username
+	actualUser, exists, err := handler.Driver.GetUser(attemptedUser.Username)
+	if err != nil {
+		log.Printf("Unable to retrieve user: %v", err)
+		http.Error(w, "unable ot get user", http.StatusInternalServerError)
+		return
+	}
+
+	// If the user does not exist return 401 (Unauthorized) for security reasons
+	if !exists {
+		log.Printf("Requested user %v does not exist", attemptedUser.Username)
+		http.Error(w, "bad credentials", http.StatusUnauthorized)
+		return
+	}
+
+	// Otherwise the user exists so lets see if we were provided correct credentials
+	// NOTE: attemptedUser.Password is plaintext and actualUser.Password is bcrypted hash of password
+	valid := CheckPasswordHash(attemptedUser.Password, actualUser.Password)
+	if !valid {
+		// Not valid so return unauthorized
+		log.Printf("Attempted pass: %v\n Actual pass: %v\n", attemptedUser.Password, actualUser.Password)
+		log.Printf("Bad credentials attempting to authenticate user %v", attemptedUser.Username)
+		http.Error(w, "bad credentials", http.StatusUnauthorized)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 // Inserts the provided user into the database
+// This acts as the signup endpoint -- TODO: Change name accordingly
 // PUT /v1/users
 func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 	// TODO: dont think the below line is needed any more
@@ -110,7 +172,7 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Received the following user to insert: %v", string(body))
+	log.Printf("Received the following user to signup: %v", string(body))
 
 	// Marshal the body into a user object
 	user := &models.User{}
@@ -125,9 +187,14 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 	// We must insert a custom generate UUID into the user
 	user.ID = uuid.NewV4().String()
 
-	//userId := "userID"
+	// Hash our password
+	user.Password, err = HashPassword(user.Password)
+	if err != nil {
+		http.Error(w, "error inserting user", http.StatusInternalServerError)
+		return
+	}
+
 	handler.Driver.InsertUser(*user)
-	log.Println("userId: " + user.ID)
 	w.WriteHeader(http.StatusOK)
 }
 

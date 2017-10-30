@@ -5,7 +5,9 @@ import (
 )
 
 type StorageDriver interface {
-	InsertUser(models.User) error
+	InsertUser(user models.User) error
+
+	GetUser(username string) (models.User, bool, error)
 
 	GetRedditOAuthToken(userID string) (string, error)
 
