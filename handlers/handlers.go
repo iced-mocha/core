@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/iced-mocha/core/comparators"
 	"github.com/iced-mocha/core/config"
+	"github.com/iced-mocha/core/sessions"
 	"github.com/iced-mocha/core/storage/driver"
 	"github.com/iced-mocha/shared/models"
 	"github.com/satori/go.uuid"
@@ -20,8 +21,9 @@ import (
 )
 
 type CoreHandler struct {
-	Driver driver.StorageDriver
-	Config config.Config
+	Driver         driver.StorageDriver
+	Config         config.Config
+	SessionManager sessions.Manager
 
 	redditHost, facebookHost, hnHost, gnHost string
 	redditPort, facebookPort, hnPort, gnPort int
@@ -40,10 +42,14 @@ type PostResponse struct {
 	err   error
 }
 
-func New(d driver.StorageDriver, c config.Config) (*CoreHandler, error) {
+func New(d driver.StorageDriver, sm sessions.Manager, c config.Config) (*CoreHandler, error) {
 	handler := &CoreHandler{}
 	handler.Driver = d
 	handler.Config = c
+	handler.SessionManager = sm
+
+	// Start our session garbage collection
+	//go handler.SessionManager.GC()
 
 	// TODO Find a better way to do this
 	// Maybe create a GetStringKeys function that returns array of values and a potential error
@@ -112,6 +118,7 @@ func CheckPasswordHash(password, hash string) bool {
 }
 
 func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
+
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Error reading body: %v", err)
@@ -150,11 +157,13 @@ func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 	valid := CheckPasswordHash(attemptedUser.Password, actualUser.Password)
 	if !valid {
 		// Not valid so return unauthorized
-		log.Printf("Attempted pass: %v\n Actual pass: %v\n", attemptedUser.Password, actualUser.Password)
 		log.Printf("Bad credentials attempting to authenticate user %v", attemptedUser.Username)
 		http.Error(w, "bad credentials", http.StatusUnauthorized)
 		return
 	}
+
+	// Successfully logged in make sure we have a session -- will insert a session id into the ResponseWriters cookies
+	handler.SessionManager.SessionStart(w, r)
 
 	w.WriteHeader(http.StatusOK)
 }
