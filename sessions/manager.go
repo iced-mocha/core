@@ -54,26 +54,33 @@ func (manager *Manager) GC() {
 	time.AfterFunc(time.Duration(manager.maxlifetime), func() { manager.GC() })
 }
 
+func (manager *Manager) HasSession(r *http.Request) bool {
+	cookie, err := r.Cookie(manager.cookieName)
+	return (err == nil && cookie.Value != "")
+}
+
 // checks the existence of any sessions related to the current user, and creates a new session if none is found.
 func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (session Session) {
 	manager.lock.Lock()
 	defer manager.lock.Unlock()
 
 	// Check for a session id store at our cookie name in the incoming requests cookies
-	cookie, err := r.Cookie(manager.cookieName)
-	if err != nil || cookie.Value == "" {
+	if !manager.HasSession(r) {
 		log.Printf("No session cookie found, creating one now")
 		// No session id could be found so lets create a new session and store it in the users cookies
 		sid := manager.sessionId()
 		session, _ = manager.provider.SessionInit(sid)
-		log.Printf("Cookie name: %v", manager.cookieName)
+		// TODO: HttpOnly should probably be true
 		cookie := http.Cookie{Name: manager.cookieName, Value: url.QueryEscape(sid), Path: "/", HttpOnly: false, MaxAge: int(manager.maxlifetime)}
 		http.SetCookie(w, &cookie)
-		log.Printf("Inserted cookie for session id: %v", sid)
+		log.Printf("Writing cookie for session id: %v", sid)
 		return
 	}
 
 	// Otherwise the session exists so lets get the id and from that the session
+
+	// We know the cookie exists at this point so ignore the error
+	cookie, _ := r.Cookie(manager.cookieName)
 	sid, _ := url.QueryUnescape(cookie.Value)
 	session, _ = manager.provider.SessionRead(sid)
 	return
