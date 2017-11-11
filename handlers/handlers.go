@@ -122,7 +122,7 @@ func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Error reading body: %v", err)
-		http.Error(w, "can't read body", http.StatusBadRequest)
+		http.Error(w, "unable to read request body", http.StatusBadRequest)
 		return
 	}
 
@@ -134,6 +134,14 @@ func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(body, attemptedUser); err != nil {
 		log.Printf("Error parsing body: %v", err)
 		http.Error(w, "can't parse body", http.StatusBadRequest)
+		return
+	}
+
+	// First check to see if the user is already logged in
+	if handler.SessionManager.HasSession(r) {
+		log.Printf("User %v attempted to log in, but they are already logged in.", attemptedUser.Username)
+		// Not sure if this should be an error
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 
