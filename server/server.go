@@ -16,6 +16,9 @@ func New(api handlers.CoreAPI) (*Server, error) {
 
 	s.Router.HandleFunc("/v1/posts", api.GetPosts).Methods("GET")
 
+	// To determine if the user is logged in
+	s.Router.HandleFunc("/v1/loggedin", api.IsLoggedIn).Methods("GET")
+
 	s.Router.HandleFunc("/v1/users", api.InsertUser).Methods("POST")
 	s.Router.HandleFunc("/v1/login", api.Login).Methods("POST")
 

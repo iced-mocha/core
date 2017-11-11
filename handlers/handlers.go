@@ -117,6 +117,15 @@ func CheckPasswordHash(password, hash string) bool {
 	return err == nil
 }
 
+func (handler *CoreHandler) IsLoggedIn(w http.ResponseWriter, r *http.Request) {
+	// First check to see if the user is already logged in
+	if handler.SessionManager.HasSession(r) {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	w.WriteHeader(http.StatusInternalServerError)
+}
+
 func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	body, err := ioutil.ReadAll(r.Body)
