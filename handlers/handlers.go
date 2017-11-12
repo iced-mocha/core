@@ -126,8 +126,13 @@ func (handler *CoreHandler) IsLoggedIn(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{ "logged-in": false }`))
 }
 
-func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
+func (handler *CoreHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	// On logout all we need to do is destroy our cookies and session data
+	handler.SessionManager.SessionDestroy(w, r)
+	w.WriteHeader(http.StatusOK)
+}
 
+func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Error reading body: %v", err)

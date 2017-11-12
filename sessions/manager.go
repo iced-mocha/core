@@ -71,7 +71,7 @@ func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (se
 		sid := manager.sessionId()
 		session, _ = manager.provider.SessionInit(sid)
 		// TODO: HttpOnly should probably be true
-		cookie := http.Cookie{Name: manager.cookieName, Value: url.QueryEscape(sid), Path: "/", HttpOnly: false, MaxAge: int(manager.maxlifetime)}
+		cookie := http.Cookie{Name: manager.cookieName, Value: url.QueryEscape(sid), Path: "/", HttpOnly: true, MaxAge: int(manager.maxlifetime)}
 		http.SetCookie(w, &cookie)
 		log.Printf("Writing cookie for session id: %v", sid)
 		return
@@ -98,7 +98,7 @@ func (manager *Manager) SessionDestroy(w http.ResponseWriter, r *http.Request) {
 		defer manager.lock.Unlock()
 		manager.provider.SessionDestroy(cookie.Value)
 		expiration := time.Now()
-		// TODO: Not sure why this needs to be done
+		// Overwrite the current cookie with an expired one
 		cookie := http.Cookie{Name: manager.cookieName, Path: "/", HttpOnly: true, Expires: expiration, MaxAge: -1}
 		http.SetCookie(w, &cookie)
 	}
