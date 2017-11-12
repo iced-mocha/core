@@ -92,14 +92,15 @@ func (manager *Manager) SessionDestroy(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(manager.cookieName)
 	if err != nil || cookie.Value == "" {
 		// No cookie to delete so return
+		log.Printf("No session found to destroy")
 		return
 	} else {
+		log.Printf("destroying session")
 		manager.lock.Lock()
 		defer manager.lock.Unlock()
 		manager.provider.SessionDestroy(cookie.Value)
-		expiration := time.Now()
 		// Overwrite the current cookie with an expired one
-		cookie := http.Cookie{Name: manager.cookieName, Path: "/", HttpOnly: true, Expires: expiration, MaxAge: -1}
+		cookie := http.Cookie{Name: manager.cookieName, Path: "/", HttpOnly: true, Expires: time.Unix(0, 0), MaxAge: -1}
 		http.SetCookie(w, &cookie)
 	}
 }

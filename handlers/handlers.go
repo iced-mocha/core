@@ -128,6 +128,7 @@ func (handler *CoreHandler) IsLoggedIn(w http.ResponseWriter, r *http.Request) {
 
 func (handler *CoreHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	// On logout all we need to do is destroy our cookies and session data
+	log.Printf("Logging out user")
 	handler.SessionManager.SessionDestroy(w, r)
 	w.WriteHeader(http.StatusOK)
 }
