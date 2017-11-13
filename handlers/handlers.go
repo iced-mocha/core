@@ -186,9 +186,45 @@ func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Successfully logged in make sure we have a session -- will insert a session id into the ResponseWriters cookies
-	handler.SessionManager.SessionStart(w, r)
+	session := handler.SessionManager.SessionStart(w, r)
+	// Links the session id to our username
+	session.Set("username", attemptedUser.Username)
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// Gets the user information tied to the session id in request
+// GET /v1/users
+func (handler *CoreHandler) GetUser(w http.ResponseWriter, r *http.Request) {
+	s, err := handler.SessionManager.GetSession(r)
+	if err != nil {
+		// Return unauthorized error -- but TODO: in the future differentiate between 401 and 500
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// Get user associate with the session
+	ui := s.Get("username")
+	username, ok := ui.(string)
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Retrieve the user from the database
+	user, exists, err := handler.Driver.GetUser(username)
+	if !exists || err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	contents, err := json.Marshal(user)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(contents)
 }
 
 // Inserts the provided user into the database

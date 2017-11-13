@@ -54,6 +54,24 @@ func (manager *Manager) GC() {
 	time.AfterFunc(time.Duration(manager.maxlifetime), func() { manager.GC() })
 }
 
+func (manager *Manager) GetSession(r *http.Request) (Session, error) {
+	if !manager.HasSession(r) {
+		return nil, errors.New("cannot get non-existant session")
+	}
+	cookie, _ := r.Cookie(manager.cookieName)
+	sid, err := url.QueryUnescape(cookie.Value)
+	if err != nil {
+		return nil, errors.New("unable to get session, likely invalid session id")
+	}
+
+	session, err := manager.provider.SessionRead(sid)
+	if err != nil {
+		return nil, errors.New("unable to get session, likely invalid session id")
+	}
+
+	return session, nil
+}
+
 func (manager *Manager) HasSession(r *http.Request) bool {
 	cookie, err := r.Cookie(manager.cookieName)
 	return (err == nil && cookie.Value != "")
@@ -78,11 +96,9 @@ func (manager *Manager) SessionStart(w http.ResponseWriter, r *http.Request) (se
 	}
 
 	// Otherwise the session exists so lets get the id and from that the session
-
 	// We know the cookie exists at this point so ignore the error
-	cookie, _ := r.Cookie(manager.cookieName)
-	sid, _ := url.QueryUnescape(cookie.Value)
-	session, _ = manager.provider.SessionRead(sid)
+	// TODO: handle error better
+	session, _ = manager.GetSession(r)
 	return
 }
 
