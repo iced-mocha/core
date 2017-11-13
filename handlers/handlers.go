@@ -291,14 +291,15 @@ func (handler *CoreHandler) getRedditPosts(c chan PostResponse) {
 	// Get our reddit bearer token
 	redditToken, err := handler.Driver.GetRedditOAuthToken(username)
 	if err != nil || redditToken == "" {
-		c <- PostResponse{redditPosts, fmt.Errorf("Unable to retrieve oauth token from database for user: %v\n Error:  %v", username, err)}
+		c <- PostResponse{redditPosts, fmt.Errorf("Unable to retrieve reddit oauth token from database for user: %v\n Error:  %v", username, err)}
 		return
 	}
 
 	client := &http.Client{}
 	log.Printf("Token:%v\n", redditToken)
 	jsonString := []byte(fmt.Sprintf("{ \"bearertoken\": \"%v\"}", redditToken))
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%v:%v/v1/%v/posts", handler.redditHost, handler.redditPort, username), bytes.NewBuffer(jsonString))
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%v:%v/v1/%v/posts",
+		handler.redditHost, handler.redditPort, username), bytes.NewBuffer(jsonString))
 	if err != nil {
 		c <- PostResponse{redditPosts, err}
 		return
@@ -339,12 +340,57 @@ func (handler *CoreHandler) getGoogleNewsPosts(c chan PostResponse) {
 	c <- PostResponse{gnPosts, nil}
 }
 
+func combinePosts(postResponses []PostResponse) []models.Post {
+	posts := make([]models.Post, 0)
+	for _, val := range postResponses {
+		if val.err != nil {
+			log.Printf("Unable to get posts: %v", val.err)
+		} else {
+			posts = append(posts, val.posts...)
+		}
+	}
+	return posts
+}
+
+func writePosts(w http.ResponseWriter, posts []models.Post) {
+	w.Header().Set("Content-Type", "application/json")
+	// Write our posts as a response
+	res, err := json.Marshal(posts)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write(res)
+}
+
+func (handler *CoreHandler) GetNoAuthPosts(w http.ResponseWriter, r *http.Request) {
+	c := make(chan PostResponse, 2)
+
+	go handler.getHackerNewsPosts(c)
+	go handler.getGoogleNewsPosts(c)
+
+	r1, r2 := <-c, <-c
+	postResponses := []PostResponse{r1, r2}
+	posts := combinePosts(postResponses)
+
+	// TODO Can this be made a constant outside the function?
+	weights := make(map[string]float64)
+	weights[models.PlatformHackerNews] = 4
+	weights[models.PlatformGoogleNews] = 8
+	sort.Sort(comparators.ByPostRank{posts, weights})
+
+	writePosts(w, posts)
+}
+
 // GET /v1/posts
 func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 
+	// TODO: different logic is needing depending if we are logged in or not
+	//if handler.SessionManager.HasSession(r) {
+
 	// Make a channel for the various posts we are getting
 	// Right now we have 3 clients to fetch from so we need to block until all 3 complete
-	c := make(chan PostResponse, 3)
+	c := make(chan PostResponse, 4)
 
 	// Get the response from hackernews
 	go handler.getHackerNewsPosts(c)
@@ -355,30 +401,10 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	// Read all response from channel (we dont really know which is which)
 	r1, r2, r3, r4 := <-c, <-c, <-c, <-c
 
-	// Error check based on the responses from each of of request
-	if r1.err != nil && r2.err != nil && r3.err != nil && r4.err != nil {
-		http.Error(w, "Could not receive posts from any of our client", http.StatusInternalServerError)
-		log.Printf("Errors:\n %v \n %v \n %v \n %v", r1.err, r2.err, r3.err, r4.err)
-		return
-	}
+	postResponses := []PostResponse{r1, r2, r3, r4}
+	posts := combinePosts(postResponses)
 
-	posts := make([]models.Post, 0)
-
-	// Otherwise if we reach here at least one of our clients was successful so lets take the posts we did get
-	// TODO: Make this better
-	if r1.err == nil {
-		posts = append(posts, r1.posts...)
-	}
-	if r2.err == nil {
-		posts = append(posts, r2.posts...)
-	}
-	if r3.err == nil {
-		posts = append(posts, r3.posts...)
-	}
-	if r4.err == nil {
-		posts = append(posts, r4.posts...)
-	}
-
+	// TODO Can this be made a constant outside the function?
 	weights := make(map[string]float64)
 	weights[models.PlatformHackerNews] = 4
 	weights[models.PlatformReddit] = 4
@@ -386,14 +412,5 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	weights[models.PlatformGoogleNews] = 8
 	sort.Sort(comparators.ByPostRank{posts, weights})
 
-	w.Header().Set("Content-Type", "application/json")
-
-	// Write our posts as a response
-	res, err := json.Marshal(posts)
-	if err == nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(res)
-	} else {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	writePosts(w, posts)
 }
