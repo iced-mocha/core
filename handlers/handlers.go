@@ -232,23 +232,24 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 
 // Fetches posts from hackernews
 func (handler *CoreHandler) getHackerNewsPosts(c chan PostResponse) {
-	// Create an inital array with the same amount of posts we expect to get from hackernews
-	hnPosts := make([]models.Post, 20)
+	hnPosts := make([]models.Post, 0)
 
 	hnResp, err := http.Get(fmt.Sprintf("http://%v:%v/v1/posts?count=20", handler.hnHost, handler.hnPort))
 	if err != nil {
 		c <- PostResponse{hnPosts, fmt.Errorf("Unable to fetch posts from hacker news: %v", err)}
 		return
 	}
+	defer hnResp.Body.Close()
 
-	err = json.NewDecoder(hnResp.Body).Decode(&hnPosts)
+	var hnRespBody models.ClientResp
+	err = json.NewDecoder(hnResp.Body).Decode(&hnRespBody)
 	if err != nil {
 		c <- PostResponse{hnPosts, fmt.Errorf("Unable to decode response from hacker-news: %v", err)}
 		return
 	}
 
 	log.Println("Successfully retrieved posts from hackernews")
-	c <- PostResponse{hnPosts, nil}
+	c <- PostResponse{hnRespBody.Posts, nil}
 }
 
 func (handler *CoreHandler) getFacebookPosts(query url.Values, c chan PostResponse) {
@@ -270,6 +271,7 @@ func (handler *CoreHandler) getFacebookPosts(query url.Values, c chan PostRespon
 		c <- PostResponse{fbPosts, fmt.Errorf("Unable to get posts from facebook: %v", err)}
 		return
 	}
+	defer fbResp.Body.Close()
 
 	err = json.NewDecoder(fbResp.Body).Decode(&fbRespBody)
 	fbPosts = fbRespBody.Posts
@@ -310,6 +312,7 @@ func (handler *CoreHandler) getRedditPosts(c chan PostResponse) {
 		c <- PostResponse{redditPosts, fmt.Errorf("Unable to get posts from reddit: %v", err)}
 		return
 	}
+	defer redditResp.Body.Close()
 
 	err = json.NewDecoder(redditResp.Body).Decode(&redditPosts)
 	if err != nil {
@@ -329,6 +332,7 @@ func (handler *CoreHandler) getGoogleNewsPosts(c chan PostResponse) {
 		c <- PostResponse{gnPosts, fmt.Errorf("Unable to fetch posts from google news: %v", err)}
 		return
 	}
+	defer gnResp.Body.Close()
 
 	err = json.NewDecoder(gnResp.Body).Decode(&gnPosts)
 	if err != nil {
