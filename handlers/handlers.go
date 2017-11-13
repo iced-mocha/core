@@ -14,14 +14,14 @@ import (
 	"github.com/iced-mocha/core/comparators"
 	"github.com/iced-mocha/core/config"
 	"github.com/iced-mocha/core/sessions"
-	"github.com/iced-mocha/core/storage/driver"
+	"github.com/iced-mocha/core/storage"
 	"github.com/iced-mocha/shared/models"
 	"github.com/satori/go.uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type CoreHandler struct {
-	Driver         driver.StorageDriver
+	Driver         storage.Driver
 	Config         config.Config
 	SessionManager sessions.Manager
 
@@ -42,7 +42,7 @@ type PostResponse struct {
 	err   error
 }
 
-func New(d driver.StorageDriver, sm sessions.Manager, c config.Config) (*CoreHandler, error) {
+func New(d storage.Driver, sm sessions.Manager, c config.Config) (*CoreHandler, error) {
 	handler := &CoreHandler{}
 	handler.Driver = d
 	handler.Config = c

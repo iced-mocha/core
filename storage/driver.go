@@ -1,10 +1,10 @@
-package driver
+package storage
 
 import (
 	"github.com/iced-mocha/shared/models"
 )
 
-type StorageDriver interface {
+type Driver interface {
 	InsertUser(user models.User) error
 
 	GetUser(username string) (models.User, bool, error)

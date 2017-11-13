@@ -10,7 +10,7 @@ import (
 	"github.com/iced-mocha/core/server"
 	"github.com/iced-mocha/core/sessions"
 	_ "github.com/iced-mocha/core/sessions/memory"
-	"github.com/iced-mocha/core/storage/driver/sqlite"
+	"github.com/iced-mocha/core/storage/sqlite"
 )
 
 func main() {
