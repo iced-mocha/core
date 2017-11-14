@@ -38,6 +38,7 @@ type RedditAuth struct {
 // Wrapper for the response from a post client
 type PostResponse struct {
 	posts []models.Post
+	nextURL  string
 	err   error
 }
 
@@ -271,7 +272,7 @@ func (handler *CoreHandler) getHackerNewsPosts(c chan PostResponse) {
 
 	hnResp, err := http.Get(fmt.Sprintf("http://%v:%v/v1/posts?count=20", handler.hnHost, handler.hnPort))
 	if err != nil {
-		c <- PostResponse{hnPosts, fmt.Errorf("Unable to fetch posts from hacker news: %v", err)}
+		c <- PostResponse{hnPosts, "", fmt.Errorf("Unable to fetch posts from hacker news: %v", err)}
 		return
 	}
 	defer hnResp.Body.Close()
@@ -279,12 +280,12 @@ func (handler *CoreHandler) getHackerNewsPosts(c chan PostResponse) {
 	var hnRespBody models.ClientResp
 	err = json.NewDecoder(hnResp.Body).Decode(&hnRespBody)
 	if err != nil {
-		c <- PostResponse{hnPosts, fmt.Errorf("Unable to decode response from hacker-news: %v", err)}
+		c <- PostResponse{hnPosts, "", fmt.Errorf("Unable to decode response from hacker-news: %v", err)}
 		return
 	}
 
 	log.Println("Successfully retrieved posts from hackernews")
-	c <- PostResponse{hnRespBody.Posts, nil}
+	c <- PostResponse{hnRespBody.Posts, hnRespBody.NextURL, nil}
 }
 
 func (handler *CoreHandler) getFacebookPosts(query url.Values, c chan PostResponse) {
@@ -303,7 +304,7 @@ func (handler *CoreHandler) getFacebookPosts(query url.Values, c chan PostRespon
 	var fbPosts = make([]models.Post, 0)
 	fbResp, err := http.Get(fmt.Sprintf("http://%v:%v/v1/posts?fb_id=%v&fb_token=%v", handler.facebookHost, handler.facebookPort, fbId, fbToken))
 	if err != nil {
-		c <- PostResponse{fbPosts, fmt.Errorf("Unable to get posts from facebook: %v", err)}
+		c <- PostResponse{fbPosts, "", fmt.Errorf("Unable to get posts from facebook: %v", err)}
 		return
 	}
 	defer fbResp.Body.Close()
@@ -311,12 +312,12 @@ func (handler *CoreHandler) getFacebookPosts(query url.Values, c chan PostRespon
 	err = json.NewDecoder(fbResp.Body).Decode(&fbRespBody)
 	fbPosts = fbRespBody.Posts
 	if err != nil {
-		c <- PostResponse{fbPosts, fmt.Errorf("Unable to decode posts from facebook: %v", err)}
+		c <- PostResponse{fbPosts, "", fmt.Errorf("Unable to decode posts from facebook: %v", err)}
 		return
 	}
 
 	log.Println("Successfully retrieved posts from facebook")
-	c <- PostResponse{fbPosts, nil}
+	c <- PostResponse{fbPosts, fbRespBody.NextURL, nil}
 }
 
 func (handler *CoreHandler) getRedditPosts(c chan PostResponse) {
@@ -328,7 +329,7 @@ func (handler *CoreHandler) getRedditPosts(c chan PostResponse) {
 	// Get our reddit bearer token
 	redditToken, err := handler.Driver.GetRedditOAuthToken(username)
 	if err != nil || redditToken == "" {
-		c <- PostResponse{redditPosts, fmt.Errorf("Unable to retrieve reddit oauth token from database for user: %v\n Error:  %v", username, err)}
+		c <- PostResponse{redditPosts, "", fmt.Errorf("Unable to retrieve reddit oauth token from database for user: %v\n Error:  %v", username, err)}
 		return
 	}
 
@@ -338,25 +339,25 @@ func (handler *CoreHandler) getRedditPosts(c chan PostResponse) {
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%v:%v/v1/%v/posts",
 		handler.redditHost, handler.redditPort, username), bytes.NewBuffer(jsonString))
 	if err != nil {
-		c <- PostResponse{redditPosts, err}
+		c <- PostResponse{redditPosts, "", err}
 		return
 	}
 
 	redditResp, err := client.Do(req)
 	if err != nil {
-		c <- PostResponse{redditPosts, fmt.Errorf("Unable to get posts from reddit: %v", err)}
+		c <- PostResponse{redditPosts, "", fmt.Errorf("Unable to get posts from reddit: %v", err)}
 		return
 	}
 	defer redditResp.Body.Close()
 
 	err = json.NewDecoder(redditResp.Body).Decode(&redditPosts)
 	if err != nil {
-		c <- PostResponse{redditPosts, fmt.Errorf("Unable to decode posts from Reddit: %v", err)}
+		c <- PostResponse{redditPosts, "", fmt.Errorf("Unable to decode posts from Reddit: %v", err)}
 		return
 	}
 
 	log.Println("Successfully retrieved posts from reddit")
-	c <- PostResponse{redditPosts, nil}
+	c <- PostResponse{redditPosts, "", nil} // TODO: Don't return "", return the pagination URL
 }
 
 func (handler *CoreHandler) getGoogleNewsPosts(c chan PostResponse) {
@@ -364,19 +365,19 @@ func (handler *CoreHandler) getGoogleNewsPosts(c chan PostResponse) {
 
 	gnResp, err := http.Get(fmt.Sprintf("http://%v:%v/v1/posts?count=20", handler.gnHost, handler.gnPort))
 	if err != nil {
-		c <- PostResponse{gnPosts, fmt.Errorf("Unable to fetch posts from google news: %v", err)}
+		c <- PostResponse{gnPosts, "", fmt.Errorf("Unable to fetch posts from google news: %v", err)}
 		return
 	}
 	defer gnResp.Body.Close()
 
 	err = json.NewDecoder(gnResp.Body).Decode(&gnPosts)
 	if err != nil {
-		c <- PostResponse{gnPosts, fmt.Errorf("Unable to decode response from google-news: %v", err)}
+		c <- PostResponse{gnPosts, "", fmt.Errorf("Unable to decode response from google-news: %v", err)}
 		return
 	}
 
 	log.Println("Successfully retrieved posts from googlenews")
-	c <- PostResponse{gnPosts, nil}
+	c <- PostResponse{gnPosts, "", nil}
 }
 
 func combinePosts(postResponses []PostResponse) []models.Post {
