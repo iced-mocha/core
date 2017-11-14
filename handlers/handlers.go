@@ -267,10 +267,10 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // Fetches posts from hackernews
-func (handler *CoreHandler) getHackerNewsPosts(c chan PostResponse) {
+func (handler *CoreHandler) getHackerNewsPosts(c chan PostResponse, url string) {
 	hnPosts := make([]models.Post, 0)
 
-	hnResp, err := http.Get(fmt.Sprintf("http://%v:%v/v1/posts?count=20", handler.hnHost, handler.hnPort))
+	hnResp, err := http.Get(url)
 	if err != nil {
 		c <- PostResponse{hnPosts, "", fmt.Errorf("Unable to fetch posts from hacker news: %v", err)}
 		return
@@ -428,14 +428,19 @@ func (handler *CoreHandler) GetNoAuthPosts(w http.ResponseWriter, r *http.Reques
 func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	// TODO: different logic is needing depending if we are logged in or not
 	//if handler.SessionManager.HasSession(r) {
+	nextHNURL := fmt.Sprintf("http://%v:%v/v1/posts?count=20", handler.hnHost, handler.hnPort)
 	getNextHNPage := func() []models.Post {
-		// TODO: should get next page, not same page over and over
+		if nextHNURL == "" {
+			return make([]models.Post, 0)
+		}
 		c := make(chan PostResponse)
-		go handler.getHackerNewsPosts(c)
+		go handler.getHackerNewsPosts(c, nextHNURL)
 		resp := <-c
 		if resp.err == nil {
+			nextHNURL = resp.nextURL
 			return resp.posts
 		} else {
+			nextHNURL = ""
 			log.Printf("error getting hn page %v\n", resp.err)
 			return make([]models.Post, 0)
 		}
@@ -467,8 +472,15 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	called := false
 	getNextGNPage := func() []models.Post {
-		// TODO: should get next page, not same page over and over
+		// google news is not paginated, so if we have gotten the first page,
+		// we have gotten all the pages
+		if called {
+			return make([]models.Post, 0)
+		}
+		called = true
+
 		c := make(chan PostResponse)
 		go handler.getGoogleNewsPosts(c)
 		resp := <-c
@@ -485,7 +497,7 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	rd := ranking.NewContentProvider(4, getNextRDPage)
 	gn := ranking.NewContentProvider(8, getNextGNPage)
 
-	posts := ranking.GetPosts([]*ranking.ContentProvider{hn, fb, rd, gn}, 40)
+	posts := ranking.GetPosts([]*ranking.ContentProvider{hn, fb, rd, gn}, 100)
 
 	writePosts(w, posts)
 }
