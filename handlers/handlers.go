@@ -8,11 +8,10 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"sort"
 
 	"github.com/gorilla/mux"
-	"github.com/iced-mocha/core/comparators"
 	"github.com/iced-mocha/core/config"
+	"github.com/iced-mocha/core/ranking"
 	"github.com/iced-mocha/core/sessions"
 	"github.com/iced-mocha/core/storage"
 	"github.com/iced-mocha/shared/models"
@@ -403,6 +402,7 @@ func writePosts(w http.ResponseWriter, posts []models.Post) {
 	w.Write(res)
 }
 
+/*
 func (handler *CoreHandler) GetNoAuthPosts(w http.ResponseWriter, r *http.Request) {
 	c := make(chan PostResponse, 2)
 
@@ -421,36 +421,70 @@ func (handler *CoreHandler) GetNoAuthPosts(w http.ResponseWriter, r *http.Reques
 
 	writePosts(w, posts)
 }
+*/
 
 // GET /v1/posts
 func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
-
 	// TODO: different logic is needing depending if we are logged in or not
 	//if handler.SessionManager.HasSession(r) {
+	getNextHNPage := func() []models.Post {
+		// TODO: should get next page, not same page over and over
+		c := make(chan PostResponse)
+		go handler.getHackerNewsPosts(c)
+		resp := <-c
+		if resp.err == nil {
+			return resp.posts
+		} else {
+			log.Printf("error getting hn page %v\n", resp.err)
+			return make([]models.Post, 0)
+		}
+	}
 
-	// Make a channel for the various posts we are getting
-	// Right now we have 3 clients to fetch from so we need to block until all 3 complete
-	c := make(chan PostResponse, 4)
+	getNextFBPage := func() []models.Post {
+		// TODO: should get next page, not same page over and over
+		c := make(chan PostResponse)
+		go handler.getFacebookPosts(r.URL.Query(), c)
+		resp := <-c
+		if resp.err == nil {
+			return resp.posts
+		} else {
+			log.Printf("error getting fb page %v\n", resp.err)
+			return make([]models.Post, 0)
+		}
+	}
 
-	// Get the response from hackernews
-	go handler.getHackerNewsPosts(c)
-	go handler.getFacebookPosts(r.URL.Query(), c)
-	go handler.getRedditPosts(c)
-	go handler.getGoogleNewsPosts(c)
+	getNextRDPage := func() []models.Post {
+		// TODO: should get next page, not same page over and over
+		c := make(chan PostResponse)
+		go handler.getRedditPosts(c)
+		resp := <-c
+		if resp.err == nil {
+			return resp.posts
+		} else {
+			log.Printf("error getting rd page %v\n", resp.err)
+			return make([]models.Post, 0)
+		}
+	}
 
-	// Read all response from channel (we dont really know which is which)
-	r1, r2, r3, r4 := <-c, <-c, <-c, <-c
+	getNextGNPage := func() []models.Post {
+		// TODO: should get next page, not same page over and over
+		c := make(chan PostResponse)
+		go handler.getGoogleNewsPosts(c)
+		resp := <-c
+		if resp.err == nil {
+			return resp.posts
+		} else {
+			log.Printf("error getting gn page %v\n", resp.err)
+			return make([]models.Post, 0)
+		}
+	}
 
-	postResponses := []PostResponse{r1, r2, r3, r4}
-	posts := combinePosts(postResponses)
+	hn := ranking.NewContentProvider(4, getNextHNPage)
+	fb := ranking.NewContentProvider(1, getNextFBPage)
+	rd := ranking.NewContentProvider(4, getNextRDPage)
+	gn := ranking.NewContentProvider(8, getNextGNPage)
 
-	// TODO Can this be made a constant outside the function?
-	weights := make(map[string]float64)
-	weights[models.PlatformHackerNews] = 4
-	weights[models.PlatformReddit] = 4
-	weights[models.PlatformFacebook] = 1
-	weights[models.PlatformGoogleNews] = 8
-	sort.Sort(comparators.ByPostRank{posts, weights})
+	posts := ranking.GetPosts([]*ranking.ContentProvider{hn, fb, rd, gn}, 40)
 
 	writePosts(w, posts)
 }
