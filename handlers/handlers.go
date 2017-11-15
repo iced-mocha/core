@@ -447,7 +447,7 @@ func (handler *CoreHandler) getContentProviders(fbId, fbToken string) []*ranking
 	nextFBURL := fmt.Sprintf("http://%v:%v/v1/posts?fb_id=%v&fb_token=%v", handler.facebookHost, handler.facebookPort, fbId, fbToken)
 	getNextFBPage := func() []models.Post {
 		log.Printf("getting posts from url %v", nextFBURL)
-		if nextHNURL == "" {
+		if nextFBURL == "" {
 			return make([]models.Post, 0)
 		}
 		// TODO: should get next page, not same page over and over
@@ -508,11 +508,11 @@ func (handler *CoreHandler) getContentProviders(fbId, fbToken string) []*ranking
 func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	var providers []*ranking.ContentProvider
 	query := r.URL.Query()
-	if token, ok := query["paging_token"]; ok && len(token) != 0 {
+	if token, ok := query["page_token"]; ok && len(token) != 0 {
 		if p, ok := handler.Cache.Get(token[0]); ok {
 			providers = p.([]*ranking.ContentProvider)
 		} else {
-			http.Error(w, "Data for paging token not found", http.StatusNotFound)
+			http.Error(w, "Data for page token not found", http.StatusNotFound)
 			return
 		}
 	} else {
@@ -530,10 +530,20 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	posts := ranking.GetPosts(providers, 20)
-	pagingToken := handler.id()
-	handler.Cache.Set(pagingToken, providers, cache.DefaultExpiration)
+	pageToken := handler.id()
+	handler.Cache.Set(pageToken, providers, cache.DefaultExpiration)
 
-	log.Printf("paging token: %v", pagingToken)
+	w.Header().Set("Content-Type", "application/json")
+	res, err := json.Marshal(
+		struct {
+			Posts     []models.Post `json:"posts"`
+			PageToken string        `json:"page_token"`
+		}{posts, pageToken})
 
-	writePosts(w, posts)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Write(res)
 }
