@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/iced-mocha/core/config/yaml"
 	"github.com/iced-mocha/core/handlers"
@@ -11,6 +12,7 @@ import (
 	"github.com/iced-mocha/core/sessions"
 	_ "github.com/iced-mocha/core/sessions/memory"
 	"github.com/iced-mocha/core/storage/sqlite"
+	"github.com/patrickmn/go-cache"
 )
 
 func main() {
@@ -40,8 +42,11 @@ func main() {
 		log.Fatalf("Unable to create session manager: %v", err)
 	}
 
+	// Create our cache
+	c := cache.New(30*time.Minute, 45*time.Minute)
+
 	// Create our handler
-	handler, err := handlers.New(driver, *sm, config)
+	handler, err := handlers.New(driver, *sm, config, c)
 	if err != nil {
 		log.Fatalf("Unable to create handler", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/iced-mocha/core/config"
@@ -14,6 +15,7 @@ import (
 	"github.com/iced-mocha/core/sessions"
 	"github.com/iced-mocha/core/storage"
 	"github.com/iced-mocha/shared/models"
+	"github.com/patrickmn/go-cache"
 	"github.com/satori/go.uuid"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -22,6 +24,10 @@ type CoreHandler struct {
 	Driver         storage.Driver
 	Config         config.Config
 	SessionManager sessions.Manager
+	// TODO: Having a cache on core used for pagination requires us to only run
+	// one instance of core
+	Cache *cache.Cache
+	id    func() string
 
 	redditHost, facebookHost, hnHost, gnHost string
 	redditPort, facebookPort, hnPort, gnPort int
@@ -41,11 +47,18 @@ type PostResponse struct {
 	err     error
 }
 
-func New(d storage.Driver, sm sessions.Manager, c config.Config) (*CoreHandler, error) {
+func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cache) (*CoreHandler, error) {
 	handler := &CoreHandler{}
 	handler.Driver = d
-	handler.Config = c
+	handler.Config = conf
 	handler.SessionManager = sm
+	handler.Cache = c
+
+	var idCounter int32
+	handler.id = func() string {
+		idCounter++
+		return strconv.FormatInt(int64(idCounter), 32)
+	}
 
 	// Start our session garbage collection
 	//go handler.SessionManager.GC()
@@ -412,11 +425,7 @@ func (handler *CoreHandler) GetNoAuthPosts(w http.ResponseWriter, r *http.Reques
 }
 */
 
-// GET /v1/posts
-func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	// TODO: different logic is needing depending if we are logged in or not
-	//if handler.SessionManager.HasSession(r) {
+func (handler *CoreHandler) getContentProviders(fbId, fbToken string) []*ranking.ContentProvider {
 	nextHNURL := fmt.Sprintf("http://%v:%v/v1/posts?count=20", handler.hnHost, handler.hnPort)
 	getNextHNPage := func() []models.Post {
 		if nextHNURL == "" {
@@ -433,16 +442,6 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 			log.Printf("error getting hn page %v\n", resp.err)
 			return make([]models.Post, 0)
 		}
-	}
-
-	// TODO what if these are empty?
-	var fbId string
-	var fbToken string
-	if v, ok := query["fb_id"]; ok && len(v) != 0 {
-		fbId = v[0]
-	}
-	if v, ok := query["fb_token"]; ok && len(v) != 0 {
-		fbToken = v[0]
 	}
 
 	nextFBURL := fmt.Sprintf("http://%v:%v/v1/posts?fb_id=%v&fb_token=%v", handler.facebookHost, handler.facebookPort, fbId, fbToken)
@@ -502,7 +501,39 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	rd := ranking.NewContentProvider(4, getNextRDPage)
 	gn := ranking.NewContentProvider(8, getNextGNPage)
 
-	posts := ranking.GetPosts([]*ranking.ContentProvider{hn, fb, rd, gn}, 100)
+	return []*ranking.ContentProvider{hn, fb, rd, gn}
+}
+
+// GET /v1/posts
+func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
+	var providers []*ranking.ContentProvider
+	query := r.URL.Query()
+	if token, ok := query["paging_token"]; ok && len(token) != 0 {
+		if p, ok := handler.Cache.Get(token[0]); ok {
+			providers = p.([]*ranking.ContentProvider)
+		} else {
+			http.Error(w, "Data for paging token not found", http.StatusNotFound)
+			return
+		}
+	} else {
+		// TODO what if these are empty?
+		var fbId string
+		var fbToken string
+		if v, ok := query["fb_id"]; ok && len(v) != 0 {
+			fbId = v[0]
+		}
+		if v, ok := query["fb_token"]; ok && len(v) != 0 {
+			fbToken = v[0]
+		}
+
+		providers = handler.getContentProviders(fbId, fbToken)
+	}
+
+	posts := ranking.GetPosts(providers, 20)
+	pagingToken := handler.id()
+	handler.Cache.Set(pagingToken, providers, cache.DefaultExpiration)
+
+	log.Printf("paging token: %v", pagingToken)
 
 	writePosts(w, posts)
 }
