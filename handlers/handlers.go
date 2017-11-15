@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
 
 	"github.com/gorilla/mux"
 	"github.com/iced-mocha/core/config"
@@ -37,9 +36,9 @@ type RedditAuth struct {
 
 // Wrapper for the response from a post client
 type PostResponse struct {
-	posts []models.Post
-	nextURL  string
-	err   error
+	posts   []models.Post
+	nextURL string
+	err     error
 }
 
 func New(d storage.Driver, sm sessions.Manager, c config.Config) (*CoreHandler, error) {
@@ -288,21 +287,10 @@ func (handler *CoreHandler) getHackerNewsPosts(c chan PostResponse, url string) 
 	c <- PostResponse{hnRespBody.Posts, hnRespBody.NextURL, nil}
 }
 
-func (handler *CoreHandler) getFacebookPosts(query url.Values, c chan PostResponse) {
-	var fbId string
-	var fbToken string
-
-	// TODO what if these are empty?
-	if v, ok := query["fb_id"]; ok && len(v) != 0 {
-		fbId = v[0]
-	}
-	if v, ok := query["fb_token"]; ok && len(v) != 0 {
-		fbToken = v[0]
-	}
-
+func (handler *CoreHandler) getFacebookPosts(url string, c chan PostResponse) {
 	var fbRespBody models.ClientResp
 	var fbPosts = make([]models.Post, 0)
-	fbResp, err := http.Get(fmt.Sprintf("http://%v:%v/v1/posts?fb_id=%v&fb_token=%v", handler.facebookHost, handler.facebookPort, fbId, fbToken))
+	fbResp, err := http.Get(url)
 	if err != nil {
 		c <- PostResponse{fbPosts, "", fmt.Errorf("Unable to get posts from facebook: %v", err)}
 		return
@@ -426,6 +414,7 @@ func (handler *CoreHandler) GetNoAuthPosts(w http.ResponseWriter, r *http.Reques
 
 // GET /v1/posts
 func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
 	// TODO: different logic is needing depending if we are logged in or not
 	//if handler.SessionManager.HasSession(r) {
 	nextHNURL := fmt.Sprintf("http://%v:%v/v1/posts?count=20", handler.hnHost, handler.hnPort)
@@ -446,12 +435,28 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// TODO what if these are empty?
+	var fbId string
+	var fbToken string
+	if v, ok := query["fb_id"]; ok && len(v) != 0 {
+		fbId = v[0]
+	}
+	if v, ok := query["fb_token"]; ok && len(v) != 0 {
+		fbToken = v[0]
+	}
+
+	nextFBURL := fmt.Sprintf("http://%v:%v/v1/posts?fb_id=%v&fb_token=%v", handler.facebookHost, handler.facebookPort, fbId, fbToken)
 	getNextFBPage := func() []models.Post {
+		log.Printf("getting posts from url %v", nextFBURL)
+		if nextHNURL == "" {
+			return make([]models.Post, 0)
+		}
 		// TODO: should get next page, not same page over and over
 		c := make(chan PostResponse)
-		go handler.getFacebookPosts(r.URL.Query(), c)
+		go handler.getFacebookPosts(nextFBURL, c)
 		resp := <-c
 		if resp.err == nil {
+			nextFBURL = resp.nextURL
 			return resp.posts
 		} else {
 			log.Printf("error getting fb page %v\n", resp.err)
