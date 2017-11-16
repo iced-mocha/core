@@ -5,14 +5,15 @@ import (
 )
 
 type ContentProvider struct {
-	Weight   int
-	CurPage  []models.Post
-	NextPage func() []models.Post
-	CurPost  *models.Post
-	nextPost int
+	Weight         float64
+	CurPage        []models.Post
+	NextPage       func() []models.Post
+	CurPost        *models.Post
+	nextPost       int
+	sequenceLength int
 }
 
-func NewContentProvider(weight int, nextPage func() []models.Post) *ContentProvider {
+func NewContentProvider(weight float64, nextPage func() []models.Post) *ContentProvider {
 	c := &ContentProvider{Weight: weight, NextPage: nextPage}
 	c.NextPost()
 	return c

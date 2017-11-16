@@ -496,10 +496,10 @@ func (handler *CoreHandler) getContentProviders(fbId, fbToken string) []*ranking
 		}
 	}
 
-	hn := ranking.NewContentProvider(4, getNextHNPage)
+	hn := ranking.NewContentProvider(2, getNextHNPage)
 	fb := ranking.NewContentProvider(1, getNextFBPage)
-	rd := ranking.NewContentProvider(4, getNextRDPage)
-	gn := ranking.NewContentProvider(8, getNextGNPage)
+	rd := ranking.NewContentProvider(2, getNextRDPage)
+	gn := ranking.NewContentProvider(4, getNextGNPage)
 
 	return []*ranking.ContentProvider{hn, fb, rd, gn}
 }
