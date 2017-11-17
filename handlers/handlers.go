@@ -35,9 +35,9 @@ type CoreHandler struct {
 
 // Structure received when updating reddit oauth token
 type RedditAuth struct {
-	User         string
-	BearerToken  string
-	RefreshToken string
+	Username     string `json:"username"`
+	BearerToken  string `json:"bearer-token"`
+	RefreshToken string `json:"refresh-token"`
 }
 
 // Wrapper for the response from a post client
@@ -93,8 +93,6 @@ func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	log.Printf("Body: %v\n", string(body))
-
 	// Get the user id from path paramater
 	id := mux.Vars(r)["userID"]
 
@@ -102,12 +100,16 @@ func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Requ
 	auth := &RedditAuth{}
 	err = json.Unmarshal(body, auth)
 	if err != nil {
-		log.Printf("Error parsing body: %v", err)
+		log.Printf("Error parsing request body when updating reddit auth for user: %v - %v", id, err)
 		http.Error(w, "can't parse body", http.StatusBadRequest)
 		return
 	}
 
-	handler.Driver.UpdateOAuthToken(id, auth.BearerToken, "")
+	successful := handler.Driver.UpdateRedditAccount(id, auth.Username, auth.BearerToken, "")
+	if !successful {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 

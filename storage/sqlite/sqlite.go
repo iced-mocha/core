@@ -135,7 +135,7 @@ func (d *driver) UsernameExists(username string) (bool, error) {
 // Updates information about a reddit account for a given userID
 func (d *driver) UpdateRedditAccount(username, redditUser, authToken, tokenExpiry string) bool {
 	noAuth := false
-	query := "UPDATE UserInfo SET RedditUserName=?, RedditAuthToken=?, TokenExpiry=? where Username=?"
+	query := "UPDATE UserInfo SET RedditUserName=?, RedditAuthToken=?, RedditTokenExpiry=? where Username=?"
 	noAuthQuery := "UPDATE UserInfo SET RedditUserName=? WHERE Username=?"
 
 	// Decide which query were using
