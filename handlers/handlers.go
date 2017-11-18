@@ -82,6 +82,35 @@ func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cac
 	return handler, nil
 }
 
+// Deletes the type of account for authenticated user in the request
+// DELETE /v1/users/accounts/{type}
+func (h *CoreHandler) DeleteLinkedAccount(w http.ResponseWriter, r *http.Request) {
+	s, err := h.SessionManager.GetSession(r)
+	if err != nil {
+		// Return unauthorized error -- but TODO: in the future differentiate between 401 and 500
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// Get user associate with the session
+	ui := s.Get("username")
+	username, ok := ui.(string)
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Parse the type of account to remove
+	t := mux.Vars(r)["type"]
+
+	if t == "reddit" {
+		// Overwriting all values with "" is essentially deleting
+		h.Driver.UpdateRedditAccount(username, "", "", "")
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 // Updates the reddit oauth token stored for a user with id <userID>
 // POST /v1/user/{userID}/authorize/reddit
 func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Request) {
