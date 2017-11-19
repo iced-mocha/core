@@ -120,9 +120,10 @@ func (d *driver) GetUser(username string) (models.User, bool, error) {
 	// NOTE: It is import that this is kept up to date with database schema
 	var redditUsername, redditAuthToken, facebookUsername, facebookAuthToken NullString
 	err = rows.Scan(&user.ID, &user.Username, &user.Password, &redditUsername, &redditAuthToken, &facebookUsername, &facebookAuthToken)
-	log.Printf("Error scanning: %v", err)
-	println("facebook username: " + user.FacebookUsername)
-	log.Printf("User retrieved user with username: %v", username)
+	if err != nil {
+		log.Printf("Unable to get users: %v", err)
+		return user, false, err
+	}
 
 	user.RedditUsername = redditUsername.String
 	user.RedditAuthToken = redditAuthToken.String
