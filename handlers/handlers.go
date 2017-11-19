@@ -132,6 +132,8 @@ func (handler *CoreHandler) UpdateFacebookAuth(w http.ResponseWriter, r *http.Re
 	// Get the user id from path paramater
 	id := mux.Vars(r)["userID"]
 
+	log.Printf("About to update facebook auth information for user: %v", id)
+
 	// Change the body into a user object
 	auth := &ProviderAuth{}
 	err = json.Unmarshal(body, auth)
@@ -300,10 +302,8 @@ func (handler *CoreHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	println(user.FacebookUsername)
 
 	contents, err := json.Marshal(user)
-	println(string(contents))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
