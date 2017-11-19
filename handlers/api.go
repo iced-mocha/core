@@ -13,5 +13,6 @@ type CoreAPI interface {
 	IsLoggedIn(w http.ResponseWriter, r *http.Request)
 	RedditAuth(w http.ResponseWriter, r *http.Request)
 	UpdateRedditAuth(w http.ResponseWriter, r *http.Request)
+	UpdateFacebookAuth(w http.ResponseWriter, r *http.Request)
 	DeleteLinkedAccount(w http.ResponseWriter, r *http.Request)
 }

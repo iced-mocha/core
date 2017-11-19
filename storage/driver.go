@@ -11,7 +11,9 @@ type Driver interface {
 
 	GetRedditOAuthToken(userID string) (string, error)
 
-	UpdateRedditAccount(userID, redditUser, authToken, tokenExpiry string) bool
+	UpdateRedditAccount(userID, redditUser, authToken string) bool
+
+	UpdateFacebookAccount(userID, facebookUser, authToken string) bool
 
 	UpdateOAuthToken(userID, token, expiry string) bool
 }

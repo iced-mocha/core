@@ -27,6 +27,7 @@ func New(api handlers.CoreAPI) (*Server, error) {
 
 	s.Router.HandleFunc("/v1/users/{userID}/authorize/reddit", api.RedditAuth).Methods("GET")
 	s.Router.HandleFunc("/v1/users/{userID}/authorize/reddit", api.UpdateRedditAuth).Methods("POST")
+	s.Router.HandleFunc("/v1/users/{userID}/authorize/facebook", api.UpdateFacebookAuth).Methods("POST")
 
 	return s, nil
 }

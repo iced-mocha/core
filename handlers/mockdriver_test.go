@@ -15,7 +15,11 @@ func (m *MockDriver) GetUser(username string) (models.User, bool, error) {
 
 func (m *MockDriver) GetRedditOAuthToken(userID string) (string, error) { return "", nil }
 
-func (m *MockDriver) UpdateRedditAccount(userID, redditUser, authToken, tokenExpiry string) bool {
+func (m *MockDriver) UpdateRedditAccount(userID, redditUser, authToken string) bool {
+	return true
+}
+
+func (m *MockDriver) UpdateFacebookAccount(userID, facebookUser, authToken string) bool {
 	return true
 }
 

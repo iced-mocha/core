@@ -33,10 +33,11 @@ type CoreHandler struct {
 	redditPort, facebookPort, hnPort, gnPort int
 }
 
-// Structure received when updating reddit oauth token
-type RedditAuth struct {
+// Structure received when updating provider auth info
+type ProviderAuth struct {
+	Type         string `json:"type"`
 	Username     string `json:"username"`
-	BearerToken  string `json:"bearer-token"`
+	Token        string `json:"token"`
 	RefreshToken string `json:"refresh-token"`
 }
 
@@ -87,6 +88,7 @@ func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cac
 func (h *CoreHandler) DeleteLinkedAccount(w http.ResponseWriter, r *http.Request) {
 	s, err := h.SessionManager.GetSession(r)
 	if err != nil {
+		log.Printf("Could not get retrieve session for user: %v", err)
 		// Return unauthorized error -- but TODO: in the future differentiate between 401 and 500
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -105,15 +107,20 @@ func (h *CoreHandler) DeleteLinkedAccount(w http.ResponseWriter, r *http.Request
 
 	if t == "reddit" {
 		// Overwriting all values with "" is essentially deleting
-		h.Driver.UpdateRedditAccount(username, "", "", "")
+		h.Driver.UpdateRedditAccount(username, "", "")
+	} else if t == "facebook" {
+		h.Driver.UpdateFacebookAccount(username, "", "")
 	}
 
 	w.WriteHeader(http.StatusOK)
 }
 
-// Updates the reddit oauth token stored for a user with id <userID>
-// POST /v1/user/{userID}/authorize/reddit
-func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Request) {
+// Updates the facebook auth info stored for a user with id <userID>
+// POST /v1/user/{userID}/authorize/facebook
+func (handler *CoreHandler) UpdateFacebookAuth(w http.ResponseWriter, r *http.Request) {
+
+	// TODO: We are currently not verifying that the user requesting this is in fact allowed to do so
+
 	// Read body of the request
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -126,7 +133,40 @@ func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Requ
 	id := mux.Vars(r)["userID"]
 
 	// Change the body into a user object
-	auth := &RedditAuth{}
+	auth := &ProviderAuth{}
+	err = json.Unmarshal(body, auth)
+	if err != nil {
+		log.Printf("Error parsing request body when updating facebook auth for user: %v - %v", id, err)
+		http.Error(w, "can't parse body", http.StatusBadRequest)
+		return
+	}
+
+	successful := handler.Driver.UpdateFacebookAccount(id, auth.Username, auth.Token)
+	if !successful {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+// Updates the reddit oauth token stored for a user with id <userID>
+// POST /v1/user/{userID}/authorize/reddit
+func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Request) {
+	// TODO: We are currently not verifying that the user requesting this is in fact allowed to do so
+
+	// Read body of the request
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Error reading body: %v", err)
+		http.Error(w, "can't read body", http.StatusBadRequest)
+		return
+	}
+
+	// Get the user id from path paramater
+	id := mux.Vars(r)["userID"]
+
+	// Change the body into a user object
+	auth := &ProviderAuth{}
 	err = json.Unmarshal(body, auth)
 	if err != nil {
 		log.Printf("Error parsing request body when updating reddit auth for user: %v - %v", id, err)
@@ -134,7 +174,7 @@ func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	successful := handler.Driver.UpdateRedditAccount(id, auth.Username, auth.BearerToken, "")
+	successful := handler.Driver.UpdateRedditAccount(id, auth.Username, auth.Token)
 	if !successful {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -260,8 +300,10 @@ func (handler *CoreHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	println(user.FacebookUsername)
 
 	contents, err := json.Marshal(user)
+	println(string(contents))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

@@ -4,5 +4,6 @@ CREATE TABLE `UserInfo` (
 	`Password` VARCHAR(64) NULL,
 	`RedditUsername` VARCHAR(64) NULL,
 	`RedditAuthToken` VARCHAR(64) NULL,
-	`RedditTokenExpiry` TIMESTAMP NULL
+	`FacebookUsername` VARCHAR(64) NULL,
+	`FacebookAuthToken` VARCHAR(64) NULL
 );

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"reflect"
 
 	"github.com/iced-mocha/shared/models"
 	_ "github.com/mattn/go-sqlite3"
@@ -19,18 +20,38 @@ type driver struct {
 	db *sql.DB
 }
 
+type NullString sql.NullString
+
+// Scan implements the Scanner interface for NullString
+func (ns *NullString) Scan(value interface{}) error {
+	var s sql.NullString
+	if err := s.Scan(value); err != nil {
+		return err
+	}
+
+	// if nil then make Valid false
+	if reflect.TypeOf(value) == nil {
+		*ns = NullString{s.String, false}
+	} else {
+		*ns = NullString{s.String, true}
+	}
+
+	return nil
+}
+
 // Inserts a user into the database
 // NOTE: This assumes the password of the user object has already been hashed
 func (d *driver) InsertUser(user models.User) error {
 	log.Printf("Inserting user with ID: %v, and username: %v", user.ID, user.Username)
 
-	stmt, err := d.db.Prepare("INSERT INTO UserInfo(UserID, Username, Password, RedditUserName) values(?,?,?,?)")
+	stmt, err := d.db.Prepare("INSERT INTO UserInfo(UserID, Username, Password, RedditUserName," +
+		"RedditAuthToken, FacebookUsername, FacebookAuthToken) values(?,?,?,?,?,?,?)")
 	if err != nil {
 		log.Printf("Unable to prepare statement: %v", err)
 		return err
 	}
 
-	_, err = stmt.Exec(user.ID, user.Username, user.Password, user.RedditUsername)
+	_, err = stmt.Exec(user.ID, user.Username, user.Password, user.RedditUsername, user.RedditAuthToken, user.FacebookUsername, user.FacebookAuthToken)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -97,9 +118,16 @@ func (d *driver) GetUser(username string) (models.User, bool, error) {
 
 	// Scan the select Row into our user struct
 	// NOTE: It is import that this is kept up to date with database schema
-	rows.Scan(&user.ID, &user.Username, &user.Password, &user.RedditUsername, &user.RedditAuthToken, &user.RedditTokenExpiry)
-
+	var redditUsername, redditAuthToken, facebookUsername, facebookAuthToken NullString
+	err = rows.Scan(&user.ID, &user.Username, &user.Password, &redditUsername, &redditAuthToken, &facebookUsername, &facebookAuthToken)
+	log.Printf("Error scanning: %v", err)
+	println("facebook username: " + user.FacebookUsername)
 	log.Printf("User retrieved user with username: %v", username)
+
+	user.RedditUsername = redditUsername.String
+	user.RedditAuthToken = redditAuthToken.String
+	user.FacebookUsername = facebookUsername.String
+	user.FacebookAuthToken = facebookAuthToken.String
 
 	// Otherwise the username does exist
 	return user, true, nil
@@ -133,32 +161,16 @@ func (d *driver) UsernameExists(username string) (bool, error) {
 }
 
 // Updates information about a reddit account for a given userID
-func (d *driver) UpdateRedditAccount(username, redditUser, authToken, tokenExpiry string) bool {
-	noAuth := false
-	query := "UPDATE UserInfo SET RedditUserName=?, RedditAuthToken=?, RedditTokenExpiry=? where Username=?"
-	noAuthQuery := "UPDATE UserInfo SET RedditUserName=? WHERE Username=?"
-
-	// Decide which query were using
-	if authToken == "" && tokenExpiry == "" {
-		noAuth = true
-		query = noAuthQuery
-	}
+func (d *driver) UpdateRedditAccount(username, redditUser, authToken string) bool {
+	query := "UPDATE UserInfo SET RedditUserName=?, RedditAuthToken=? where Username=?"
 
 	stmt, err := d.db.Prepare(query)
 	if err != nil {
-		log.Println(err)
+		log.Printf("Unable to prepare query to update reddit account: %v", err)
 		return false
 	}
 
-	var res sql.Result
-
-	// Determine from before which is the proper statement to execute
-	if noAuth {
-		res, err = stmt.Exec(redditUser, username)
-	} else {
-		res, err = stmt.Exec(redditUser, authToken, tokenExpiry, username)
-	}
-
+	res, err := stmt.Exec(redditUser, authToken, username)
 	if err != nil {
 		log.Println(err)
 		return false
@@ -172,7 +184,32 @@ func (d *driver) UpdateRedditAccount(username, redditUser, authToken, tokenExpir
 
 	// If the number of rows is greater than 0, then we have updated a user
 	return n > 0
+}
 
+// Updates information about a facebook account for a given userID
+func (d *driver) UpdateFacebookAccount(username, facebookUser, authToken string) bool {
+	query := "UPDATE UserInfo SET FacebookUserName=?, FacebookAuthToken=? where Username=?"
+
+	stmt, err := d.db.Prepare(query)
+	if err != nil {
+		log.Printf("Unable to prepare query to update reddit account: %v", err)
+		return false
+	}
+
+	res, err := stmt.Exec(facebookUser, authToken, username)
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+
+	// If the number of rows is greater than 0, then we have updated a user
+	return n > 0
 }
 
 // Updates the auth token stored in db for the given userID
@@ -209,10 +246,10 @@ func New(config Config) (*driver, error) {
 	var filename string
 
 	// If we are provided a database file via the config object use it. Otherwise default
-	if config.databaseFile == "" {
+	if config.DatabaseFile == "" {
 		filename = databaseFile
 	} else {
-		filename = config.databaseFile
+		filename = config.DatabaseFile
 	}
 
 	db, err := sql.Open(databaseDriver, filename)
