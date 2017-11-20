@@ -394,16 +394,12 @@ func (handler *CoreHandler) getFacebookPosts(url string, c chan PostResponse) {
 	c <- PostResponse{fbPosts, fbRespBody.NextURL, nil}
 }
 
-func (handler *CoreHandler) getRedditPosts(c chan PostResponse) {
-	// Use this userID until we implement login
-	username := "userID"
+func (handler *CoreHandler) getRedditPosts(c chan PostResponse, username, redditToken string) {
 	redditPosts := make([]models.Post, 0)
 
 	// TODO: Eventually we will first have to check whether this token exists or if it expired
-	// Get our reddit bearer token
-	redditToken, err := handler.Driver.GetRedditOAuthToken(username)
-	if err != nil || redditToken == "" {
-		c <- PostResponse{redditPosts, "", fmt.Errorf("Unable to retrieve reddit oauth token from database for user: %v\n Error:  %v", username, err)}
+	if redditToken == "" {
+		c <- PostResponse{redditPosts, "", fmt.Errorf("Unable to retrieve reddit oauth token from database for user: %v\n", username)}
 		return
 	}
 
@@ -498,7 +494,7 @@ func (handler *CoreHandler) GetNoAuthPosts(w http.ResponseWriter, r *http.Reques
 }
 */
 
-func (handler *CoreHandler) getContentProviders(fbId, fbToken string) []*ranking.ContentProvider {
+func (handler *CoreHandler) getContentProviders(user models.User) []*ranking.ContentProvider {
 	nextHNURL := fmt.Sprintf("http://%v:%v/v1/posts?count=20", handler.hnHost, handler.hnPort)
 	getNextHNPage := func() []models.Post {
 		if nextHNURL == "" {
@@ -517,7 +513,8 @@ func (handler *CoreHandler) getContentProviders(fbId, fbToken string) []*ranking
 		}
 	}
 
-	nextFBURL := fmt.Sprintf("http://%v:%v/v1/posts?fb_id=%v&fb_token=%v", handler.facebookHost, handler.facebookPort, fbId, fbToken)
+	// TODO: Don't add Facebook or Reddit clients without tokens
+	nextFBURL := fmt.Sprintf("http://%v:%v/v1/posts?fb_token=%v", handler.facebookHost, handler.facebookPort, user.FacebookAuthToken)
 	getNextFBPage := func() []models.Post {
 		log.Printf("getting posts from url %v", nextFBURL)
 		if nextFBURL == "" {
@@ -539,7 +536,8 @@ func (handler *CoreHandler) getContentProviders(fbId, fbToken string) []*ranking
 	getNextRDPage := func() []models.Post {
 		// TODO: should get next page, not same page over and over
 		c := make(chan PostResponse)
-		go handler.getRedditPosts(c)
+
+		go handler.getRedditPosts(c, user.RedditUsername, user.RedditAuthToken)
 		resp := <-c
 		if resp.err == nil {
 			return resp.posts
@@ -579,6 +577,23 @@ func (handler *CoreHandler) getContentProviders(fbId, fbToken string) []*ranking
 
 // GET /v1/posts
 func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
+	s, err := handler.SessionManager.GetSession(r)
+	if err != nil {
+		// Return unauthorized error -- but TODO: in the future differentiate between 401 and 500
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// Get user associate with the session
+	username := s.Get("username").(string)
+
+	// Retrieve the user from the database
+	user, exists, err := handler.Driver.GetUser(username)
+	if !exists || err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
 	var providers []*ranking.ContentProvider
 	query := r.URL.Query()
 	if token, ok := query["page_token"]; ok && len(token) != 0 {
@@ -589,17 +604,7 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		// TODO what if these are empty?
-		var fbId string
-		var fbToken string
-		if v, ok := query["fb_id"]; ok && len(v) != 0 {
-			fbId = v[0]
-		}
-		if v, ok := query["fb_token"]; ok && len(v) != 0 {
-			fbToken = v[0]
-		}
-
-		providers = handler.getContentProviders(fbId, fbToken)
+		providers = handler.getContentProviders(user)
 	}
 
 	posts := ranking.GetPosts(providers, 20)
