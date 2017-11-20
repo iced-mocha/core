@@ -132,6 +132,8 @@ func (handler *CoreHandler) UpdateFacebookAuth(w http.ResponseWriter, r *http.Re
 	// Get the user id from path paramater
 	id := mux.Vars(r)["userID"]
 
+	log.Printf("About to update facebook auth information for user: %v", id)
+
 	// Change the body into a user object
 	auth := &ProviderAuth{}
 	err = json.Unmarshal(body, auth)
@@ -216,11 +218,15 @@ func (handler *CoreHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func buildJSONError(message string) string {
+	return `{ "error": "` + message + `" }`
+}
+
 func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Error reading body: %v", err)
-		http.Error(w, "unable to read request body", http.StatusBadRequest)
+		http.Error(w, buildJSONError("bad request when attempting to login"), http.StatusBadRequest)
 		return
 	}
 
@@ -231,7 +237,7 @@ func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 	attemptedUser := &models.User{}
 	if err := json.Unmarshal(body, attemptedUser); err != nil {
 		log.Printf("Error parsing body: %v", err)
-		http.Error(w, "can't parse body", http.StatusBadRequest)
+		http.Error(w, buildJSONError("bad request when attempting to login"), http.StatusBadRequest)
 		return
 	}
 
@@ -247,14 +253,14 @@ func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 	actualUser, exists, err := handler.Driver.GetUser(attemptedUser.Username)
 	if err != nil {
 		log.Printf("Unable to retrieve user: %v", err)
-		http.Error(w, "unable ot get user", http.StatusInternalServerError)
+		http.Error(w, buildJSONError("internal server error when attempting to login"), http.StatusInternalServerError)
 		return
 	}
 
 	// If the user does not exist return 401 (Unauthorized) for security reasons
 	if !exists {
 		log.Printf("Requested user %v does not exist", attemptedUser.Username)
-		http.Error(w, "bad credentials", http.StatusUnauthorized)
+		http.Error(w, buildJSONError("incorrect username or password"), http.StatusUnauthorized)
 		return
 	}
 
@@ -264,7 +270,7 @@ func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if !valid {
 		// Not valid so return unauthorized
 		log.Printf("Bad credentials attempting to authenticate user %v", attemptedUser.Username)
-		http.Error(w, "bad credentials", http.StatusUnauthorized)
+		http.Error(w, buildJSONError("incorrect username or password"), http.StatusUnauthorized)
 		return
 	}
 
@@ -300,10 +306,8 @@ func (handler *CoreHandler) GetUser(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	println(user.FacebookUsername)
 
 	contents, err := json.Marshal(user)
-	println(string(contents))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

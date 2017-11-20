@@ -193,7 +193,7 @@ func (d *driver) UpdateFacebookAccount(username, facebookUser, authToken string)
 
 	stmt, err := d.db.Prepare(query)
 	if err != nil {
-		log.Printf("Unable to prepare query to update reddit account: %v", err)
+		log.Printf("Unable to prepare query to update facebook account: %v", err)
 		return false
 	}
 
