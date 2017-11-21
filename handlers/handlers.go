@@ -1,9 +1,7 @@
 package handlers
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -11,6 +9,11 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/iced-mocha/core/config"
+	"github.com/iced-mocha/core/clients"
+	"github.com/iced-mocha/core/clients/facebook"
+	"github.com/iced-mocha/core/clients/reddit"
+	"github.com/iced-mocha/core/clients/googlenews"
+	"github.com/iced-mocha/core/clients/hackernews"
 	"github.com/iced-mocha/core/ranking"
 	"github.com/iced-mocha/core/sessions"
 	"github.com/iced-mocha/core/storage"
@@ -29,8 +32,7 @@ type CoreHandler struct {
 	Cache *cache.Cache
 	id    func() string
 
-	redditHost, facebookHost, hnHost, gnHost string
-	redditPort, facebookPort, hnPort, gnPort int
+	Clients []clients.Client
 }
 
 // Structure received when updating provider auth info
@@ -39,13 +41,6 @@ type ProviderAuth struct {
 	Username     string `json:"username"`
 	Token        string `json:"token"`
 	RefreshToken string `json:"refresh-token"`
-}
-
-// Wrapper for the response from a post client
-type PostResponse struct {
-	posts   []models.Post
-	nextURL string
-	err     error
 }
 
 func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cache) (*CoreHandler, error) {
@@ -77,8 +72,11 @@ func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cac
 		return nil, err
 	}
 
-	handler.hnHost, handler.facebookHost, handler.redditHost, handler.gnHost = hosts[0], hosts[1], hosts[2], hosts[3]
-	handler.hnPort, handler.facebookPort, handler.redditPort, handler.gnPort = ports[0], ports[1], ports[2], ports[3]
+	handler.Clients = make([]clients.Client, 4)
+	handler.Clients[0] = hackernews.New(hosts[0], ports[0], 2.0)
+	handler.Clients[1] = facebook.New(hosts[1], ports[1], 1.0)
+	handler.Clients[2] = reddit.New(hosts[2], ports[2], 2.0)
+	handler.Clients[3] = googlenews.New(hosts[3], ports[3], 4.0)
 
 	return handler, nil
 }
@@ -355,117 +353,6 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// Fetches posts from hackernews
-func (handler *CoreHandler) getHackerNewsPosts(c chan PostResponse, url string) {
-	hnPosts := make([]models.Post, 0)
-
-	hnResp, err := http.Get(url)
-	if err != nil {
-		c <- PostResponse{hnPosts, "", fmt.Errorf("Unable to fetch posts from hacker news: %v", err)}
-		return
-	}
-	defer hnResp.Body.Close()
-
-	var hnRespBody models.ClientResp
-	err = json.NewDecoder(hnResp.Body).Decode(&hnRespBody)
-	if err != nil {
-		c <- PostResponse{hnPosts, "", fmt.Errorf("Unable to decode response from hacker-news: %v", err)}
-		return
-	}
-
-	log.Println("Successfully retrieved posts from hackernews")
-	c <- PostResponse{hnRespBody.Posts, hnRespBody.NextURL, nil}
-}
-
-func (handler *CoreHandler) getFacebookPosts(url string, c chan PostResponse) {
-	var fbRespBody models.ClientResp
-	var fbPosts = make([]models.Post, 0)
-	fbResp, err := http.Get(url)
-	if err != nil {
-		c <- PostResponse{fbPosts, "", fmt.Errorf("Unable to get posts from facebook: %v", err)}
-		return
-	}
-	defer fbResp.Body.Close()
-
-	err = json.NewDecoder(fbResp.Body).Decode(&fbRespBody)
-	fbPosts = fbRespBody.Posts
-	if err != nil {
-		c <- PostResponse{fbPosts, "", fmt.Errorf("Unable to decode posts from facebook: %v", err)}
-		return
-	}
-
-	log.Println("Successfully retrieved posts from facebook")
-	c <- PostResponse{fbPosts, fbRespBody.NextURL, nil}
-}
-
-func (handler *CoreHandler) getRedditPosts(c chan PostResponse, username, redditToken string) {
-	redditPosts := make([]models.Post, 0)
-
-	// TODO: Eventually we will first have to check whether this token exists or if it expired
-	if redditToken == "" {
-		c <- PostResponse{redditPosts, "", fmt.Errorf("Unable to retrieve reddit oauth token from database for user: %v\n", username)}
-		return
-	}
-
-	client := &http.Client{}
-	log.Printf("Token:%v\n", redditToken)
-	jsonString := []byte(fmt.Sprintf("{ \"bearertoken\": \"%v\"}", redditToken))
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%v:%v/v1/%v/posts",
-		handler.redditHost, handler.redditPort, username), bytes.NewBuffer(jsonString))
-	if err != nil {
-		c <- PostResponse{redditPosts, "", err}
-		return
-	}
-
-	redditResp, err := client.Do(req)
-	if err != nil {
-		c <- PostResponse{redditPosts, "", fmt.Errorf("Unable to get posts from reddit: %v", err)}
-		return
-	}
-	defer redditResp.Body.Close()
-
-	err = json.NewDecoder(redditResp.Body).Decode(&redditPosts)
-	if err != nil {
-		c <- PostResponse{redditPosts, "", fmt.Errorf("Unable to decode posts from Reddit: %v", err)}
-		return
-	}
-
-	log.Println("Successfully retrieved posts from reddit")
-	c <- PostResponse{redditPosts, "", nil} // TODO: Don't return "", return the pagination URL
-}
-
-func (handler *CoreHandler) getGoogleNewsPosts(c chan PostResponse) {
-	gnPosts := make([]models.Post, 0, 0)
-
-	gnResp, err := http.Get(fmt.Sprintf("http://%v:%v/v1/posts?count=20", handler.gnHost, handler.gnPort))
-	if err != nil {
-		c <- PostResponse{gnPosts, "", fmt.Errorf("Unable to fetch posts from google news: %v", err)}
-		return
-	}
-	defer gnResp.Body.Close()
-
-	err = json.NewDecoder(gnResp.Body).Decode(&gnPosts)
-	if err != nil {
-		c <- PostResponse{gnPosts, "", fmt.Errorf("Unable to decode response from google-news: %v", err)}
-		return
-	}
-
-	log.Println("Successfully retrieved posts from googlenews")
-	c <- PostResponse{gnPosts, "", nil}
-}
-
-func combinePosts(postResponses []PostResponse) []models.Post {
-	posts := make([]models.Post, 0)
-	for _, val := range postResponses {
-		if val.err != nil {
-			log.Printf("Unable to get posts: %v", val.err)
-		} else {
-			posts = append(posts, val.posts...)
-		}
-	}
-	return posts
-}
-
 func writePosts(w http.ResponseWriter, posts []models.Post) {
 	w.Header().Set("Content-Type", "application/json")
 	// Write our posts as a response
@@ -477,106 +364,17 @@ func writePosts(w http.ResponseWriter, posts []models.Post) {
 	w.Write(res)
 }
 
-/*
-func (handler *CoreHandler) GetNoAuthPosts(w http.ResponseWriter, r *http.Request) {
-	c := make(chan PostResponse, 2)
-
-	go handler.getHackerNewsPosts(c)
-	go handler.getGoogleNewsPosts(c)
-
-	r1, r2 := <-c, <-c
-	postResponses := []PostResponse{r1, r2}
-	posts := combinePosts(postResponses)
-
-	// TODO Can this be made a constant outside the function?
-	weights := make(map[string]float64)
-	weights[models.PlatformHackerNews] = 4
-	weights[models.PlatformGoogleNews] = 8
-	sort.Sort(comparators.ByPostRank{posts, weights})
-
-	writePosts(w, posts)
-}
-*/
-
 func (handler *CoreHandler) getContentProviders(user models.User) []*ranking.ContentProvider {
-	nextHNURL := fmt.Sprintf("http://%v:%v/v1/posts?count=20", handler.hnHost, handler.hnPort)
-	getNextHNPage := func() []models.Post {
-		if nextHNURL == "" {
-			return make([]models.Post, 0)
+	providers := []*ranking.ContentProvider{}
+	for _, c := range handler.Clients {
+		generator, err := c.GetPageGenerator(user)
+		if err != nil {
+			log.Printf("error getting page generator for %v: %v", c.Name(), err)
+			continue
 		}
-		c := make(chan PostResponse)
-		go handler.getHackerNewsPosts(c, nextHNURL)
-		resp := <-c
-		if resp.err == nil {
-			nextHNURL = resp.nextURL
-			return resp.posts
-		} else {
-			nextHNURL = ""
-			log.Printf("error getting hn page %v\n", resp.err)
-			return make([]models.Post, 0)
-		}
+		providers = append(providers, ranking.NewContentProvider(c.Weight(), generator))
 	}
-
-	// TODO: Don't add Facebook or Reddit clients without tokens
-	nextFBURL := fmt.Sprintf("http://%v:%v/v1/posts?fb_token=%v", handler.facebookHost, handler.facebookPort, user.FacebookAuthToken)
-	getNextFBPage := func() []models.Post {
-		log.Printf("getting posts from url %v", nextFBURL)
-		if nextFBURL == "" {
-			return make([]models.Post, 0)
-		}
-		// TODO: should get next page, not same page over and over
-		c := make(chan PostResponse)
-		go handler.getFacebookPosts(nextFBURL, c)
-		resp := <-c
-		if resp.err == nil {
-			nextFBURL = resp.nextURL
-			return resp.posts
-		} else {
-			log.Printf("error getting fb page %v\n", resp.err)
-			return make([]models.Post, 0)
-		}
-	}
-
-	getNextRDPage := func() []models.Post {
-		// TODO: should get next page, not same page over and over
-		c := make(chan PostResponse)
-
-		go handler.getRedditPosts(c, user.RedditUsername, user.RedditAuthToken)
-		resp := <-c
-		if resp.err == nil {
-			return resp.posts
-		} else {
-			log.Printf("error getting rd page %v\n", resp.err)
-			return make([]models.Post, 0)
-		}
-	}
-
-	called := false
-	getNextGNPage := func() []models.Post {
-		// google news is not paginated, so if we have gotten the first page,
-		// we have gotten all the pages
-		if called {
-			return make([]models.Post, 0)
-		}
-		called = true
-
-		c := make(chan PostResponse)
-		go handler.getGoogleNewsPosts(c)
-		resp := <-c
-		if resp.err == nil {
-			return resp.posts
-		} else {
-			log.Printf("error getting gn page %v\n", resp.err)
-			return make([]models.Post, 0)
-		}
-	}
-
-	hn := ranking.NewContentProvider(2, getNextHNPage)
-	fb := ranking.NewContentProvider(1, getNextFBPage)
-	rd := ranking.NewContentProvider(2, getNextRDPage)
-	gn := ranking.NewContentProvider(4, getNextGNPage)
-
-	return []*ranking.ContentProvider{hn, fb, rd, gn}
+	return providers
 }
 
 // GET /v1/posts
