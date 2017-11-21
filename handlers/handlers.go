@@ -8,12 +8,12 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
-	"github.com/iced-mocha/core/config"
 	"github.com/iced-mocha/core/clients"
 	"github.com/iced-mocha/core/clients/facebook"
-	"github.com/iced-mocha/core/clients/reddit"
 	"github.com/iced-mocha/core/clients/googlenews"
 	"github.com/iced-mocha/core/clients/hackernews"
+	"github.com/iced-mocha/core/clients/reddit"
+	"github.com/iced-mocha/core/config"
 	"github.com/iced-mocha/core/ranking"
 	"github.com/iced-mocha/core/sessions"
 	"github.com/iced-mocha/core/storage"
@@ -366,14 +366,22 @@ func writePosts(w http.ResponseWriter, posts []models.Post) {
 
 func (handler *CoreHandler) getContentProviders(user models.User) []*ranking.ContentProvider {
 	providers := []*ranking.ContentProvider{}
+	// Construct a buffered channel to hold posts from each of our clients
+	ch := make(chan *ranking.ContentProvider, len(handler.Clients))
+
 	for _, c := range handler.Clients {
 		generator, err := c.GetPageGenerator(user)
 		if err != nil {
 			log.Printf("error getting page generator for %v: %v", c.Name(), err)
 			continue
 		}
-		providers = append(providers, ranking.NewContentProvider(c.Weight(), generator))
+		go func(ch chan *ranking.ContentProvider) {
+			ch <- ranking.NewContentProvider(c.Weight(), generator)
+		}(ch)
 	}
+
+	// Note: The number of arguments to append has to be kept up to date with the len(handler.Clients) for everything to work
+	providers = append(providers, <-ch, <-ch, <-ch, <-ch)
 	return providers
 }
 

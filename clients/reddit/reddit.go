@@ -1,19 +1,19 @@
 package reddit
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
-	"bytes"
 	"net/http"
-	"encoding/json"
 
-	"github.com/iced-mocha/shared/models"
 	"github.com/iced-mocha/core/clients"
+	"github.com/iced-mocha/shared/models"
 )
 
 type Reddit struct {
-	Host string
-	Port int
+	Host   string
+	Port   int
 	weight float64
 }
 
@@ -23,11 +23,8 @@ func New(Host string, Port int, Weight float64) *Reddit {
 
 func (r *Reddit) GetPageGenerator(user models.User) (func() []models.Post, error) {
 	getNextRDPage := func() []models.Post {
-		// TODO: should get next page, not same page over and over
-		c := make(chan clients.PostResponse)
 
-		go r.getPosts(c, user.RedditUsername, user.RedditAuthToken)
-		resp := <-c
+		resp := r.getPosts(user.RedditUsername, user.RedditAuthToken)
 		if resp.Err == nil {
 			return resp.Posts
 		} else {
@@ -35,7 +32,6 @@ func (r *Reddit) GetPageGenerator(user models.User) (func() []models.Post, error
 			return make([]models.Post, 0)
 		}
 	}
-
 
 	return getNextRDPage, nil
 }
@@ -48,13 +44,12 @@ func (r *Reddit) Weight() float64 {
 	return r.weight
 }
 
-func (r *Reddit) getPosts(c chan clients.PostResponse, username, redditToken string) {
+func (r *Reddit) getPosts(username, redditToken string) clients.PostResponse {
 	posts := make([]models.Post, 0)
 
 	// TODO: Eventually we will first have to check whether this token exists or if it expired
 	if redditToken == "" {
-		c <- clients.PostResponse{posts, "", fmt.Errorf("Unable to retrieve reddit oauth token from database for user: %v\n", username)}
-		return
+		return clients.PostResponse{posts, "", fmt.Errorf("Unable to retrieve reddit oauth token from database for user: %v\n", username)}
 	}
 
 	client := &http.Client{}
@@ -63,23 +58,20 @@ func (r *Reddit) getPosts(c chan clients.PostResponse, username, redditToken str
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%v:%v/v1/%v/posts",
 		r.Host, r.Port, username), bytes.NewBuffer(jsonString))
 	if err != nil {
-		c <- clients.PostResponse{posts, "", err}
-		return
+		return clients.PostResponse{posts, "", err}
 	}
 
 	redditResp, err := client.Do(req)
 	if err != nil {
-		c <- clients.PostResponse{posts, "", fmt.Errorf("Unable to get posts from reddit: %v", err)}
-		return
+		return clients.PostResponse{posts, "", fmt.Errorf("Unable to get posts from reddit: %v", err)}
 	}
 	defer redditResp.Body.Close()
 
 	err = json.NewDecoder(redditResp.Body).Decode(&posts)
 	if err != nil {
-		c <- clients.PostResponse{posts, "", fmt.Errorf("Unable to decode posts from Reddit: %v", err)}
-		return
+		return clients.PostResponse{posts, "", fmt.Errorf("Unable to decode posts from Reddit: %v", err)}
 	}
 
 	log.Println("Successfully retrieved posts from reddit")
-	c <- clients.PostResponse{posts, "", nil} // TODO: Don't return "", return the pagination URL
+	return clients.PostResponse{posts, "", nil} // TODO: Don't return "", return the pagination URL
 }
