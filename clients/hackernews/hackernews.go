@@ -1,18 +1,18 @@
 package hackernews
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"encoding/json"
 
-	"github.com/iced-mocha/shared/models"
 	"github.com/iced-mocha/core/clients"
+	"github.com/iced-mocha/shared/models"
 )
 
 type HackerNews struct {
-	Host string
-	Port int
+	Host   string
+	Port   int
 	weight float64
 }
 
@@ -26,9 +26,7 @@ func (h *HackerNews) GetPageGenerator(user models.User) (func() []models.Post, e
 		if nextURL == "" {
 			return make([]models.Post, 0)
 		}
-		c := make(chan clients.PostResponse)
-		go h.getPosts(c, nextURL)
-		resp := <-c
+		resp := h.getPosts(nextURL)
 		if resp.Err == nil {
 			nextURL = resp.NextURL
 			return resp.Posts
@@ -49,23 +47,21 @@ func (h *HackerNews) Weight() float64 {
 	return h.weight
 }
 
-func (h *HackerNews) getPosts(c chan clients.PostResponse, url string) {
+func (h *HackerNews) getPosts(url string) clients.PostResponse {
 	hnPosts := make([]models.Post, 0)
 
 	hnResp, err := http.Get(url)
 	if err != nil {
-		c <- clients.PostResponse{hnPosts, "", fmt.Errorf("Unable to fetch posts from hacker news: %v", err)}
-		return
+		return clients.PostResponse{hnPosts, "", fmt.Errorf("Unable to fetch posts from hacker news: %v", err)}
 	}
 	defer hnResp.Body.Close()
 
 	var hnRespBody models.ClientResp
 	err = json.NewDecoder(hnResp.Body).Decode(&hnRespBody)
 	if err != nil {
-		c <- clients.PostResponse{hnPosts, "", fmt.Errorf("Unable to decode response from hacker-news: %v", err)}
-		return
+		return clients.PostResponse{hnPosts, "", fmt.Errorf("Unable to decode response from hacker-news: %v", err)}
 	}
 
 	log.Println("Successfully retrieved posts from hackernews")
-	c <- clients.PostResponse{hnRespBody.Posts, hnRespBody.NextURL, nil}
+	return clients.PostResponse{hnRespBody.Posts, hnRespBody.NextURL, nil}
 }

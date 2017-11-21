@@ -1,18 +1,18 @@
 package googlenews
 
 import (
-	"log"
-	"fmt"
-	"net/http"
 	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
 
-	"github.com/iced-mocha/shared/models"
 	"github.com/iced-mocha/core/clients"
+	"github.com/iced-mocha/shared/models"
 )
 
 type GoogleNews struct {
-	Host string
-	Port int
+	Host   string
+	Port   int
 	weight float64
 }
 
@@ -30,9 +30,7 @@ func (g *GoogleNews) GetPageGenerator(user models.User) (func() []models.Post, e
 		}
 		called = true
 
-		c := make(chan clients.PostResponse)
-		go g.posts(c)
-		resp := <-c
+		resp := g.posts()
 		if resp.Err == nil {
 			return resp.Posts
 		} else {
@@ -51,22 +49,20 @@ func (g *GoogleNews) Weight() float64 {
 	return g.weight
 }
 
-func (g *GoogleNews) posts(c chan clients.PostResponse) {
+func (g *GoogleNews) posts() clients.PostResponse {
 	gnPosts := make([]models.Post, 0, 0)
 
 	gnResp, err := http.Get(fmt.Sprintf("http://%v:%v/v1/posts?count=20", g.Host, g.Port))
 	if err != nil {
-		c <- clients.PostResponse{gnPosts, "", fmt.Errorf("Unable to fetch posts from google news: %v", err)}
-		return
+		return clients.PostResponse{gnPosts, "", fmt.Errorf("Unable to fetch posts from google news: %v", err)}
 	}
 	defer gnResp.Body.Close()
 
 	err = json.NewDecoder(gnResp.Body).Decode(&gnPosts)
 	if err != nil {
-		c <- clients.PostResponse{gnPosts, "", fmt.Errorf("Unable to decode response from google-news: %v", err)}
-		return
+		return clients.PostResponse{gnPosts, "", fmt.Errorf("Unable to decode response from google-news: %v", err)}
 	}
 
 	log.Println("Successfully retrieved posts from googlenews")
-	c <- clients.PostResponse{gnPosts, "", nil}
+	return clients.PostResponse{gnPosts, "", nil}
 }

@@ -1,9 +1,9 @@
 package facebook
 
 import (
-	"log"
-	"fmt"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/iced-mocha/core/clients"
@@ -11,8 +11,8 @@ import (
 )
 
 type Facebook struct {
-	Host string
-	Port int
+	Host   string
+	Port   int
 	weight float64
 }
 
@@ -31,9 +31,7 @@ func (f *Facebook) GetPageGenerator(user models.User) (func() []models.Post, err
 			return make([]models.Post, 0)
 		}
 
-		c := make(chan clients.PostResponse)
-		go posts(nextFBURL, c)
-		resp := <-c
+		resp := posts(nextFBURL)
 
 		if resp.Err == nil {
 			nextFBURL = resp.NextURL
@@ -55,22 +53,20 @@ func (f *Facebook) Weight() float64 {
 	return f.weight
 }
 
-func posts(url string, c chan clients.PostResponse) {
+func posts(url string) clients.PostResponse {
 	var fbRespBody models.ClientResp
 	var fbPosts = make([]models.Post, 0)
 	fbResp, err := http.Get(url)
 	if err != nil {
-		c <- clients.PostResponse{fbPosts, "", fmt.Errorf("Unable to get posts from facebook: %v", err)}
-		return
+		return clients.PostResponse{fbPosts, "", fmt.Errorf("Unable to get posts from facebook: %v", err)}
 	}
 	defer fbResp.Body.Close()
 
 	err = json.NewDecoder(fbResp.Body).Decode(&fbRespBody)
 	fbPosts = fbRespBody.Posts
 	if err != nil {
-		c <- clients.PostResponse{fbPosts, "", fmt.Errorf("Unable to decode posts from facebook: %v", err)}
-		return
+		return clients.PostResponse{fbPosts, "", fmt.Errorf("Unable to decode posts from facebook: %v", err)}
 	}
 
-	c <- clients.PostResponse{fbPosts, fbRespBody.NextURL, nil}
+	return clients.PostResponse{fbPosts, fbRespBody.NextURL, nil}
 }
