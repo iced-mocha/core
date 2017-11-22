@@ -67,6 +67,10 @@ func (r *Reddit) getPosts(username, redditToken string) clients.PostResponse {
 	}
 	defer redditResp.Body.Close()
 
+	if redditResp.StatusCode != http.StatusOK {
+		return clients.PostResponse{posts, "", fmt.Errorf("Unable to get posts from reddit received status code: %v", redditResp.StatusCode)}
+	}
+
 	err = json.NewDecoder(redditResp.Body).Decode(&posts)
 	if err != nil {
 		return clients.PostResponse{posts, "", fmt.Errorf("Unable to decode posts from Reddit: %v", err)}
