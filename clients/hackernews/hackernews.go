@@ -62,6 +62,5 @@ func (h *HackerNews) getPosts(url string) clients.PostResponse {
 		return clients.PostResponse{hnPosts, "", fmt.Errorf("Unable to decode response from hacker-news: %v", err)}
 	}
 
-	log.Println("Successfully retrieved posts from hackernews")
 	return clients.PostResponse{hnRespBody.Posts, hnRespBody.NextURL, nil}
 }
