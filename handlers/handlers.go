@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -188,6 +189,41 @@ func (handler *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "http://reddit-client:3001/v1/authorize", http.StatusFound)
 }
 
+// TODO Move this validation code to its own package
+
+func isURLSafe(c rune) bool {
+	if (c > 90 || c < 65) && (c > 122 || c < 97) && (c != 45) && (c != 46) && (c != 95) && (c != 126) {
+		return false
+	}
+
+	return true
+}
+
+// Ensures the username and password given to signup with meet our acceptance criteria
+// Note: as of right now we only require usernames to be 4 characters long and passwords 8
+//		 additionally username must be url safe
+// The following characters are URL safe: ALPHA DIGIT "-" / "." / "_" / "~"
+func ValidateSignupCredentials(username, password string) error {
+	minUsernameLength := 4
+	minPasswordLength := 8
+
+	if len(username) < minUsernameLength {
+		return fmt.Errorf("Username must be at least %v characters long", minUsernameLength)
+	}
+
+	if len(password) < minPasswordLength {
+		return fmt.Errorf("Password must be at least %v characters long", minPasswordLength)
+	}
+
+	for _, asciiVal := range []rune(username) {
+		if !isURLSafe(asciiVal) {
+			return fmt.Errorf("Usernames must only contain contain (a-z A-Z 0-9 - . _ ~) - found: %v", string(asciiVal))
+		}
+	}
+
+	return nil
+}
+
 // Consumes plaintext password and hashes using bcrypt
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
@@ -337,7 +373,21 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO Verify username is unique
+	// verify username and password meet out criteria of valid
+	if err := ValidateSignupCredentials(user.Username, user.Password); err != nil {
+		log.Printf("Attempted to sign up user %v with invalid credentials - %v", user.Username, err)
+		http.Error(w, buildJSONError(err.Error()), http.StatusBadRequest)
+		return
+	}
+
+	// Verify username is unique
+	_, exists, err := handler.Driver.GetUser(user.Username)
+	if !exists || err != nil {
+		log.Printf("Attempted to sign up user %v but username that already exists", user.Username)
+		http.Error(w, buildJSONError(fmt.Sprintf("Attempted to sign up with username: %v - but username already exists", user.Username)),
+			http.StatusBadRequest)
+		return
+	}
 
 	// We must insert a custom generate UUID into the user
 	user.ID = uuid.NewV4().String()
