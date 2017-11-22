@@ -51,7 +51,7 @@ func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cac
 	handler.Cache = c
 
 	var idCounter int32
-	handler.id = func() string {
+	handler.getNextPagingToken = func() string {
 		idCounter++
 		return strconv.FormatInt(int64(idCounter), 32)
 	}
@@ -364,6 +364,9 @@ func writePosts(w http.ResponseWriter, posts []models.Post) {
 	w.Write(res)
 }
 
+// gets a list of content providers, one for each supported client. A content
+// provider structure stores information about the current page of data being
+// read from that content provider, and a function to get the next page of data.
 func (handler *CoreHandler) getContentProviders(user models.User) []*ranking.ContentProvider {
 	providers := []*ranking.ContentProvider{}
 	// Construct a buffered channel to hold posts from each of our clients
@@ -420,7 +423,7 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	posts := ranking.GetPosts(providers, 20)
-	pageToken := handler.id()
+	pageToken := handler.getNextPagingToken()
 	handler.Cache.Set(pageToken, providers, cache.DefaultExpiration)
 
 	w.Header().Set("Content-Type", "application/json")

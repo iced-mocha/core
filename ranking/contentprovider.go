@@ -4,6 +4,9 @@ import (
 	"github.com/iced-mocha/shared/models"
 )
 
+// a structure to keep track of the posts being read from a single content
+// provider for a single user. It records which page we are on, and contains
+// a function used to get the next page of data from the content provider
 type ContentProvider struct {
 	Weight         float64
 	CurPage        []models.Post
