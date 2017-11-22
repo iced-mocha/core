@@ -29,8 +29,8 @@ type CoreHandler struct {
 	SessionManager sessions.Manager
 	// TODO: Having a cache on core used for pagination requires us to only run
 	// one instance of core
-	Cache *cache.Cache
-	id    func() string
+	Cache              *cache.Cache
+	getNextPagingToken func() string
 
 	Clients []clients.Client
 }
@@ -382,7 +382,6 @@ func (handler *CoreHandler) getContentProviders(user models.User) []*ranking.Con
 			ch <- ranking.NewContentProvider(c.Weight(), generator)
 		}(ch)
 	}
-
 
 	// Note: The number of arguments to append has to be kept up to date with the len(handler.Clients) for everything to work
 	providers = append(providers, <-ch, <-ch, <-ch, <-ch)
