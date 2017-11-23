@@ -417,10 +417,11 @@ func writePosts(w http.ResponseWriter, posts []models.Post) {
 // gets a list of content providers, one for each supported client. A content
 // provider structure stores information about the current page of data being
 // read from that content provider, and a function to get the next page of data.
-func (handler *CoreHandler) getContentProviders(user models.User) []*ranking.ContentProvider {
+func (handler *CoreHandler) getContentProviders(user *models.User) []*ranking.ContentProvider {
 	providers := []*ranking.ContentProvider{}
 	// Construct a buffered channel to hold posts from each of our clients
-	ch := make(chan *ranking.ContentProvider, len(handler.Clients))
+	numContentProviders := 0
+	ch := make(chan *ranking.ContentProvider)
 	for _, c := range handler.Clients {
 		generator, err := c.GetPageGenerator(user)
 		if err != nil {
@@ -428,13 +429,15 @@ func (handler *CoreHandler) getContentProviders(user models.User) []*ranking.Con
 			continue
 		}
 
+		numContentProviders++
 		go func(ch chan *ranking.ContentProvider) {
 			ch <- ranking.NewContentProvider(c.Weight(), generator)
 		}(ch)
 	}
 
-	// Note: The number of arguments to append has to be kept up to date with the len(handler.Clients) for everything to work
-	providers = append(providers, <-ch, <-ch, <-ch, <-ch)
+	for i := 0; i < numContentProviders; i++ {
+		providers = append(providers, <-ch)
+	}
 
 	return providers
 }
@@ -443,8 +446,7 @@ func (handler *CoreHandler) getContentProviders(user models.User) []*ranking.Con
 func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	s, err := handler.SessionManager.GetSession(r)
 	if err != nil {
-		// Return unauthorized error -- but TODO: in the future differentiate between 401 and 500
-		w.WriteHeader(http.StatusUnauthorized)
+		handler.getPostsForUser(nil, w, r)
 		return
 	}
 
@@ -452,12 +454,16 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	username := s.Get("username").(string)
 
 	// Retrieve the user from the database
-	user, exists, err := handler.Driver.GetUser(username)
-	if !exists || err != nil {
+	user, _, err := handler.Driver.GetUser(username)
+	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
+	handler.getPostsForUser(&user, w, r)
+}
+
+func (handler *CoreHandler) getPostsForUser(user *models.User, w http.ResponseWriter, r *http.Request) {
 	var providers []*ranking.ContentProvider
 	query := r.URL.Query()
 	if token, ok := query["page_token"]; ok && len(token) != 0 {

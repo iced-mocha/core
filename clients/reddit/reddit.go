@@ -21,18 +21,22 @@ func New(Host string, Port int, Weight float64) *Reddit {
 	return &Reddit{Host, Port, Weight}
 }
 
-func (r *Reddit) GetPageGenerator(user models.User) (func() []models.Post, error) {
-	// TODO: Eventually we will first have to check whether this token exists or if it expired
-	if user.RedditAuthToken == "" {
-		return nil, fmt.Errorf("Unable to retrieve reddit oauth token from database for user: %v\n", user.RedditUsername)
+func (r *Reddit) GetPageGenerator(user *models.User) (func() []models.Post, error) {
+	var authToken string
+	var nextURL string
+	if user == nil || user.RedditUsername == "" {
+		authToken = ""
+		nextURL = fmt.Sprintf("http://%v:%v/v1/posts", r.Host, r.Port)
+	} else {
+		authToken = user.RedditAuthToken
+		// TODO: Eventually we will first have to check if the reddit token will expire
+		nextURL = fmt.Sprintf("http://%v:%v/v1/%v/posts", r.Host, r.Port, user.RedditUsername)
 	}
-
-	nextURL := fmt.Sprintf("http://%v:%v/v1/%v/posts", r.Host, r.Port, user.RedditUsername)
 	getNextPage := func() []models.Post {
 		if nextURL == "" {
 			return []models.Post{}
 		}
-		resp := r.getPosts(nextURL, user.RedditAuthToken)
+		resp := r.getPosts(nextURL, authToken)
 		if resp.Err == nil {
 			nextURL = resp.NextURL
 			return resp.Posts

@@ -20,7 +20,7 @@ func New(Host string, Port int, Weight float64) *GoogleNews {
 	return &GoogleNews{Host, Port, Weight}
 }
 
-func (g *GoogleNews) GetPageGenerator(user models.User) (func() []models.Post, error) {
+func (g *GoogleNews) GetPageGenerator(user *models.User) (func() []models.Post, error) {
 	called := false
 	getNextPage := func() []models.Post {
 		// google news is not paginated, so if we have gotten the first page,

@@ -1,17 +1,17 @@
 package ranking
 
 import (
-	"time"
+	"github.com/iced-mocha/shared/models"
 	"math"
 	"math/rand"
-	"github.com/iced-mocha/shared/models"
+	"time"
 )
 
 func getRank(p *models.Post, weight float64, sequenceLength int) float64 {
 	age := time.Since(p.Date)
-	ageMultiplier := math.Pow((age + time.Hour * 12).Minutes(), 1.2)
-	sequenceMultiplier := math.Pow(float64(1 + sequenceLength), 0.2)
-	randomMultiplier := rand.Float64() / 10 + 1.0
+	ageMultiplier := math.Pow((age + time.Hour*12).Minutes(), 1.2)
+	sequenceMultiplier := math.Pow(float64(1+sequenceLength), 0.2)
+	randomMultiplier := rand.Float64()/10 + 1.0
 	return weight * ageMultiplier * sequenceMultiplier * randomMultiplier
 }
 

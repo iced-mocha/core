@@ -19,8 +19,8 @@ type ContentProvider struct {
 
 func NewContentProvider(weight float64, nextPage func() []models.Post) *ContentProvider {
 	c := &ContentProvider{
-		Weight: weight,
-		NextPage: nextPage,
+		Weight:       weight,
+		NextPage:     nextPage,
 		nextPageChan: make(chan []models.Post, 1),
 	}
 	c.NextPost()
@@ -29,7 +29,7 @@ func NewContentProvider(weight float64, nextPage func() []models.Post) *ContentP
 
 func (c *ContentProvider) NextPost() {
 	// preload the next page if we are getting close to needing it
-	if c.nextPost == len(c.CurPage) / 2 {
+	if c.nextPost == len(c.CurPage)/2 {
 		go func() {
 			c.nextPageChan <- c.NextPage()
 		}()

@@ -9,7 +9,7 @@ import (
 type Client interface {
 	// returns a function which will return the next page of posts for the
 	// content provider
-	GetPageGenerator(user models.User) (func() []models.Post, error)
+	GetPageGenerator(user *models.User) (func() []models.Post, error)
 	Name() string
 	Weight() float64
 }
