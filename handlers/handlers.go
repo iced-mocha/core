@@ -380,14 +380,14 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify username is unique
-	_, exists, err := handler.Driver.GetUser(user.Username)
-	if exists || err != nil {
-		log.Printf("Attempted to sign up user %v but username that already exists", user.Username)
-		http.Error(w, buildJSONError(fmt.Sprintf("Attempted to sign up with username: %v - but username already exists", user.Username)),
-			http.StatusBadRequest)
-		return
-	}
+	/*	_, exists, err := handler.Driver.GetUser(user.Username)
+		if !exists || err != nil {
+			log.Printf("Attempted to sign up user %v but username that already exists", user.Username)
+			http.Error(w, buildJSONError(fmt.Sprintf("Attempted to sign up with username: %v - but username already exists", user.Username)),
+				http.StatusBadRequest)
+			return
+		}
+	*/
 
 	// We must insert a custom generate UUID into the user
 	user.ID = uuid.NewV4().String()
