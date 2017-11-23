@@ -24,7 +24,7 @@ func (h *HackerNews) GetPageGenerator(user models.User) (func() []models.Post, e
 	nextURL := fmt.Sprintf("http://%v:%v/v1/posts?count=20", h.Host, h.Port)
 	getNextPage := func() []models.Post {
 		if nextURL == "" {
-			return make([]models.Post, 0)
+			return []models.Post{}
 		}
 		resp := h.getPosts(nextURL)
 		if resp.Err == nil {
@@ -33,7 +33,7 @@ func (h *HackerNews) GetPageGenerator(user models.User) (func() []models.Post, e
 		} else {
 			nextURL = ""
 			log.Printf("error getting hn page %v\n", resp.Err)
-			return make([]models.Post, 0)
+			return []models.Post{}
 		}
 	}
 	return getNextPage, nil

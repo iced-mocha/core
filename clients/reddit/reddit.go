@@ -22,18 +22,28 @@ func New(Host string, Port int, Weight float64) *Reddit {
 }
 
 func (r *Reddit) GetPageGenerator(user models.User) (func() []models.Post, error) {
-	getNextRDPage := func() []models.Post {
+	// TODO: Eventually we will first have to check whether this token exists or if it expired
+	if user.RedditAuthToken == "" {
+		return nil, fmt.Errorf("Unable to retrieve reddit oauth token from database for user: %v\n", user.RedditUsername)
+	}
 
-		resp := r.getPosts(user.RedditUsername, user.RedditAuthToken)
+	nextURL := fmt.Sprintf("http://%v:%v/v1/%v/posts", r.Host, r.Port, user.RedditUsername)
+	getNextPage := func() []models.Post {
+		if nextURL == "" {
+			return []models.Post{}
+		}
+		resp := r.getPosts(nextURL, user.RedditAuthToken)
 		if resp.Err == nil {
+			nextURL = resp.NextURL
 			return resp.Posts
 		} else {
+			nextURL = ""
 			log.Printf("error getting rd page %v\n", resp.Err)
-			return make([]models.Post, 0)
+			return []models.Post{}
 		}
 	}
 
-	return getNextRDPage, nil
+	return getNextPage, nil
 }
 
 func (r *Reddit) Name() string {
@@ -44,19 +54,12 @@ func (r *Reddit) Weight() float64 {
 	return r.weight
 }
 
-func (r *Reddit) getPosts(username, redditToken string) clients.PostResponse {
-	posts := make([]models.Post, 0)
-
-	// TODO: Eventually we will first have to check whether this token exists or if it expired
-	if redditToken == "" {
-		return clients.PostResponse{posts, "", fmt.Errorf("Unable to retrieve reddit oauth token from database for user: %v\n", username)}
-	}
-
+func (r *Reddit) getPosts(url, redditToken string) clients.PostResponse {
+	posts := []models.Post{}
 	client := &http.Client{}
 	log.Printf("Token:%v\n", redditToken)
 	jsonString := []byte(fmt.Sprintf("{ \"bearertoken\": \"%v\"}", redditToken))
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%v:%v/v1/%v/posts",
-		r.Host, r.Port, username), bytes.NewBuffer(jsonString))
+	req, err := http.NewRequest(http.MethodGet, url, bytes.NewBuffer(jsonString))
 	if err != nil {
 		return clients.PostResponse{posts, "", err}
 	}
@@ -71,11 +74,14 @@ func (r *Reddit) getPosts(username, redditToken string) clients.PostResponse {
 		return clients.PostResponse{posts, "", fmt.Errorf("Unable to get posts from reddit received status code: %v", redditResp.StatusCode)}
 	}
 
-	err = json.NewDecoder(redditResp.Body).Decode(&posts)
+	clientResp := models.ClientResp{}
+	err = json.NewDecoder(redditResp.Body).Decode(&clientResp)
+	log.Printf("resp: \n%+v\n", clientResp)
+	posts = clientResp.Posts
 	if err != nil {
 		return clients.PostResponse{posts, "", fmt.Errorf("Unable to decode posts from Reddit: %v", err)}
 	}
 
 	log.Println("Successfully retrieved posts from reddit")
-	return clients.PostResponse{posts, "", nil} // TODO: Don't return "", return the pagination URL
+	return clients.PostResponse{posts, clientResp.NextURL, nil}
 }
