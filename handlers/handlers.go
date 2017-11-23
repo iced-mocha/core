@@ -189,53 +189,6 @@ func (handler *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "http://reddit-client:3001/v1/authorize", http.StatusFound)
 }
 
-// TODO Move this validation code to its own package
-
-func isURLSafe(c rune) bool {
-	if (c > 90 || c < 65) && (c > 122 || c < 97) && (c != 45) && (c != 46) && (c != 95) && (c != 126) {
-		return false
-	}
-
-	return true
-}
-
-// Ensures the username and password given to signup with meet our acceptance criteria
-// Note: as of right now we only require usernames to be 4 characters long and passwords 8
-//		 additionally username must be url safe
-// The following characters are URL safe: ALPHA DIGIT "-" / "." / "_" / "~"
-func ValidateSignupCredentials(username, password string) error {
-	minUsernameLength := 4
-	minPasswordLength := 8
-
-	if len(username) < minUsernameLength {
-		return fmt.Errorf("Username must be at least %v characters long", minUsernameLength)
-	}
-
-	if len(password) < minPasswordLength {
-		return fmt.Errorf("Password must be at least %v characters long", minPasswordLength)
-	}
-
-	for _, asciiVal := range []rune(username) {
-		if !isURLSafe(asciiVal) {
-			return fmt.Errorf("Usernames must only contain contain (a-z A-Z 0-9 - . _ ~) - found: %v", string(asciiVal))
-		}
-	}
-
-	return nil
-}
-
-// Consumes plaintext password and hashes using bcrypt
-func HashPassword(password string) (string, error) {
-	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
-	return string(bytes), err
-}
-
-// User for authenticating login to compare password and hash
-func CheckPasswordHash(password, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	return err == nil
-}
-
 func (handler *CoreHandler) IsLoggedIn(w http.ResponseWriter, r *http.Request) {
 	// First check to see if the user is already logged in
 	if handler.SessionManager.HasSession(r) {
@@ -362,8 +315,10 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "can't read body", http.StatusBadRequest)
 		return
 	}
-
+	println("1")
 	log.Printf("Received the following user to signup: %v", string(body))
+
+	println(string(body))
 
 	// Marshal the body into a user object
 	user := &models.User{}
@@ -373,12 +328,15 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	println("2")
 	// verify username and password meet out criteria of valid
 	if err := ValidateSignupCredentials(user.Username, user.Password); err != nil {
 		log.Printf("Attempted to sign up user %v with invalid credentials - %v", user.Username, err)
+		println(err.Error())
 		http.Error(w, buildJSONError(err.Error()), http.StatusBadRequest)
 		return
 	}
+	println("3")
 
 	_, exists, err := handler.Driver.GetUser(user.Username)
 	if exists || err != nil {
@@ -387,6 +345,7 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 			http.StatusBadRequest)
 		return
 	}
+	println("4")
 
 	// We must insert a custom generate UUID into the user
 	user.ID = uuid.NewV4().String()
