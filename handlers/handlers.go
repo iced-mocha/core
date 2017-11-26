@@ -82,7 +82,7 @@ func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cac
 	return handler, nil
 }
 
-// Deletes the type of account for authenticated user in the request
+// Deletes the type of linked account for authenticated user in the request
 // DELETE /v1/users/accounts/{type}
 func (h *CoreHandler) DeleteLinkedAccount(w http.ResponseWriter, r *http.Request) {
 	s, err := h.SessionManager.GetSession(r)
@@ -380,14 +380,13 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	/*	_, exists, err := handler.Driver.GetUser(user.Username)
-		if !exists || err != nil {
-			log.Printf("Attempted to sign up user %v but username that already exists", user.Username)
-			http.Error(w, buildJSONError(fmt.Sprintf("Attempted to sign up with username: %v - but username already exists", user.Username)),
-				http.StatusBadRequest)
-			return
-		}
-	*/
+	_, exists, err := handler.Driver.GetUser(user.Username)
+	if exists || err != nil {
+		log.Printf("Attempted to sign up user %v but username already exists", user.Username)
+		http.Error(w, buildJSONError(fmt.Sprintf("Attempted to sign up with username: %v - but username already exists", user.Username)),
+			http.StatusBadRequest)
+		return
+	}
 
 	// We must insert a custom generate UUID into the user
 	user.ID = uuid.NewV4().String()

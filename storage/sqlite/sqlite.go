@@ -44,14 +44,13 @@ func (ns *NullString) Scan(value interface{}) error {
 func (d *driver) InsertUser(user models.User) error {
 	log.Printf("Inserting user with ID: %v, and username: %v", user.ID, user.Username)
 
-	stmt, err := d.db.Prepare("INSERT INTO UserInfo(UserID, Username, Password, RedditUserName," +
-		"RedditAuthToken, FacebookUsername, FacebookAuthToken) values(?,?,?,?,?,?,?)")
+	stmt, err := d.db.Prepare("INSERT INTO UserInfo(UserID, Username, Password) values(?,?,?)")
 	if err != nil {
-		log.Printf("Unable to prepare statement: %v", err)
+		log.Printf("Unable to prepare statement for inserting user: %v", err)
 		return err
 	}
 
-	_, err = stmt.Exec(user.ID, user.Username, user.Password, user.RedditUsername, user.RedditAuthToken, user.FacebookUsername, user.FacebookAuthToken)
+	_, err = stmt.Exec(user.ID, user.Username, user.Password)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -94,6 +93,7 @@ func (d *driver) GetRedditOAuthToken(username string) (string, error) {
 // Attempts to get the user with the given username from the database
 // Returns the user (if any), whether or not that user exists (bool) and a potential error
 func (d *driver) GetUser(username string) (models.User, bool, error) {
+	log.Printf("Attempting to retrieve user with username %v from db", username)
 	var user models.User = models.User{}
 
 	// This query will have a result set of 0 or 1.. 1 means Username already exists
@@ -113,6 +113,7 @@ func (d *driver) GetUser(username string) (models.User, bool, error) {
 
 	// If there is no rows.Next() Username does not exist
 	if !rows.Next() {
+		log.Printf("User %v not found in db", username)
 		return user, false, nil
 	}
 
