@@ -1,8 +1,14 @@
 package creds
 
 import (
-	"encoding/bcrypt"
 	"fmt"
+
+	"golang.org/x/crypto/bcrypt"
+)
+
+const (
+	minUsernameLength = 4
+	minPasswordLength = 8
 )
 
 // Ensures the username and password given to signup with meet our acceptance criteria
@@ -10,11 +16,6 @@ import (
 //		 additionally username must be url safe
 // The following characters are URL safe: ALPHA DIGIT "-" / "." / "_" / "~"
 func ValidateSignupCredentials(username, password string) error {
-	minUsernameLength := 4
-	minPasswordLength := 8
-
-	println(username)
-	fmt.Printf("Length of user name is %v\n", len(username))
 	if len(username) < minUsernameLength {
 		return fmt.Errorf("Username must be at least %v characters long", minUsernameLength)
 	}
@@ -29,13 +30,21 @@ func ValidateSignupCredentials(username, password string) error {
 		}
 	}
 
+	// Passwords must also be url safe for the sake of avoiding having strange characters in passwords
+	for _, asciiVal := range []rune(password) {
+		if !isURLSafe(asciiVal) {
+			return fmt.Errorf("Passwords must only contain contain (a-z A-Z 0-9 - . _ ~)")
+		}
+	}
+
 	return nil
 }
 
 // Determines that the given code point is URL safe
 // The following characters are URL safe: ALPHA DIGIT "-" / "." / "_" / "~"
 func isURLSafe(c rune) bool {
-	if (c > 90 || c < 65) && (c > 122 || c < 97) && (c != 45) && (c != 46) && (c != 95) && (c != 126) {
+	// In otherwords !upperCase && !lowerCase && !number && !dash && !dot && !underscore && !tilda
+	if (c > 90 || c < 65) && (c > 122 || c < 97) && (c < 48 || c > 57) && (c != 45) && (c != 46) && (c != 95) && (c != 126) {
 		return false
 	}
 

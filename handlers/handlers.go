@@ -15,13 +15,13 @@ import (
 	"github.com/iced-mocha/core/clients/hackernews"
 	"github.com/iced-mocha/core/clients/reddit"
 	"github.com/iced-mocha/core/config"
+	"github.com/iced-mocha/core/creds"
 	"github.com/iced-mocha/core/ranking"
 	"github.com/iced-mocha/core/sessions"
 	"github.com/iced-mocha/core/storage"
 	"github.com/iced-mocha/shared/models"
 	"github.com/patrickmn/go-cache"
 	"github.com/satori/go.uuid"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type CoreHandler struct {
@@ -253,7 +253,7 @@ func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Otherwise the user exists so lets see if we were provided correct credentials
 	// NOTE: attemptedUser.Password is plaintext and actualUser.Password is bcrypted hash of password
-	valid := CheckPasswordHash(attemptedUser.Password, actualUser.Password)
+	valid := creds.CheckPasswordHash(attemptedUser.Password, actualUser.Password)
 	if !valid {
 		// Not valid so return unauthorized
 		log.Printf("Bad credentials attempting to authenticate user %v", attemptedUser.Username)
@@ -315,10 +315,7 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "can't read body", http.StatusBadRequest)
 		return
 	}
-	println("1")
 	log.Printf("Received the following user to signup: %v", string(body))
-
-	println(string(body))
 
 	// Marshal the body into a user object
 	user := &models.User{}
@@ -328,15 +325,12 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	println("2")
 	// verify username and password meet out criteria of valid
-	if err := ValidateSignupCredentials(user.Username, user.Password); err != nil {
+	if err := creds.ValidateSignupCredentials(user.Username, user.Password); err != nil {
 		log.Printf("Attempted to sign up user %v with invalid credentials - %v", user.Username, err)
-		println(err.Error())
 		http.Error(w, buildJSONError(err.Error()), http.StatusBadRequest)
 		return
 	}
-	println("3")
 
 	_, exists, err := handler.Driver.GetUser(user.Username)
 	if exists || err != nil {
@@ -345,13 +339,12 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 			http.StatusBadRequest)
 		return
 	}
-	println("4")
 
 	// We must insert a custom generate UUID into the user
 	user.ID = uuid.NewV4().String()
 
 	// Hash our password
-	user.Password, err = HashPassword(user.Password)
+	user.Password, err = creds.HashPassword(user.Password)
 	if err != nil {
 		http.Error(w, "error inserting user", http.StatusInternalServerError)
 		return
