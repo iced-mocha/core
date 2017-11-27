@@ -16,8 +16,8 @@ type Facebook struct {
 	weight float64
 }
 
-func New(Host string, Port int, Weight float64) *Facebook {
-	return &Facebook{Host, Port, Weight}
+func New(host string, port int) *Facebook {
+	return &Facebook{Host: host, Port: port}
 }
 
 func (f *Facebook) GetPageGenerator(user *models.User) (func() []models.Post, error) {
@@ -46,7 +46,7 @@ func (f *Facebook) GetPageGenerator(user *models.User) (func() []models.Post, er
 }
 
 func (f *Facebook) Name() string {
-	return "Facebook"
+	return "facebook"
 }
 
 func (f *Facebook) Weight() float64 {

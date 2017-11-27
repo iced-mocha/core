@@ -44,13 +44,15 @@ func (ns *NullString) Scan(value interface{}) error {
 func (d *driver) InsertUser(user models.User) error {
 	log.Printf("Inserting user with ID: %v, and username: %v", user.ID, user.Username)
 
-	stmt, err := d.db.Prepare("INSERT INTO UserInfo(UserID, Username, Password) values(?,?,?)")
+	stmt, err := d.db.Prepare("INSERT INTO UserInfo(UserID, Username, Password" +
+		", RedditWeight, FacebookWeight, HackerNewsWeight, GoogleNewsWeight) values(?,?,?,?,?,?,?)")
 	if err != nil {
 		log.Printf("Unable to prepare statement for inserting user: %v", err)
 		return err
 	}
 
-	_, err = stmt.Exec(user.ID, user.Username, user.Password)
+	_, err = stmt.Exec(user.ID, user.Username, user.Password, user.PostWeights.Reddit,
+		user.PostWeights.Facebook, user.PostWeights.HackerNews, user.PostWeights.GoogleNews)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -120,7 +122,9 @@ func (d *driver) GetUser(username string) (models.User, bool, error) {
 	// Scan the select Row into our user struct
 	// NOTE: It is import that this is kept up to date with database schema
 	var redditUsername, redditAuthToken, facebookUsername, facebookAuthToken NullString
-	err = rows.Scan(&user.ID, &user.Username, &user.Password, &redditUsername, &redditAuthToken, &facebookUsername, &facebookAuthToken)
+	weights := models.Weights{}
+	err = rows.Scan(&user.ID, &user.Username, &user.Password, &redditUsername, &redditAuthToken,
+		&facebookUsername, &facebookAuthToken, &weights.Reddit, &weights.Facebook, &weights.HackerNews, &weights.GoogleNews)
 	if err != nil {
 		log.Printf("Unable to get users: %v", err)
 		return user, false, err
@@ -130,6 +134,7 @@ func (d *driver) GetUser(username string) (models.User, bool, error) {
 	user.RedditAuthToken = redditAuthToken.String
 	user.FacebookUsername = facebookUsername.String
 	user.FacebookAuthToken = facebookAuthToken.String
+	user.PostWeights = weights
 
 	// Otherwise the username does exist
 	return user, true, nil

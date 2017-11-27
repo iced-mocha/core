@@ -16,8 +16,8 @@ type GoogleNews struct {
 	weight float64
 }
 
-func New(Host string, Port int, Weight float64) *GoogleNews {
-	return &GoogleNews{Host, Port, Weight}
+func New(host string, port int) *GoogleNews {
+	return &GoogleNews{Host: host, Port: port}
 }
 
 func (g *GoogleNews) GetPageGenerator(user *models.User) (func() []models.Post, error) {
@@ -42,7 +42,7 @@ func (g *GoogleNews) GetPageGenerator(user *models.User) (func() []models.Post, 
 }
 
 func (g *GoogleNews) Name() string {
-	return "Google News"
+	return "google-news"
 }
 
 func (g *GoogleNews) Weight() float64 {

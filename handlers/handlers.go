@@ -24,6 +24,13 @@ import (
 	"github.com/satori/go.uuid"
 )
 
+const (
+	DefaultRedditWeight     = 2.0
+	DefaultFacebookWeight   = 1.0
+	DefaultHackerNewsWeight = 2.0
+	DefaultGoogleNewsWeight = 4.0
+)
+
 type CoreHandler struct {
 	Driver         storage.Driver
 	Config         config.Config
@@ -74,12 +81,64 @@ func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cac
 	}
 
 	handler.Clients = make([]clients.Client, 4)
-	handler.Clients[0] = hackernews.New(hosts[0], ports[0], 2.0)
-	handler.Clients[1] = facebook.New(hosts[1], ports[1], 1.0)
-	handler.Clients[2] = reddit.New(hosts[2], ports[2], 2.0)
-	handler.Clients[3] = googlenews.New(hosts[3], ports[3], 4.0)
+	handler.Clients[0] = hackernews.New(hosts[0], ports[0])
+	handler.Clients[1] = facebook.New(hosts[1], ports[1])
+	handler.Clients[2] = reddit.New(hosts[2], ports[2])
+	handler.Clients[3] = googlenews.New(hosts[3], ports[3])
 
 	return handler, nil
+}
+
+// POST /v1/weights
+func (h *CoreHandler) UpdateWeights(w http.ResponseWriter, r *http.Request) {
+	s, err := h.SessionManager.GetSession(r)
+	if err != nil {
+		log.Printf("Could not get retrieve session for user: %v", err)
+		// Return unauthorized error -- but TODO: in the future differentiate between 401 and 500
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// Get user associate with the session
+	ui := s.Get("username")
+	username, ok := ui.(string)
+	if !ok {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Now get the user for the username
+	u, exists, err := h.Driver.GetUser(username)
+	if !exists || err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Unmarshal our response body so we can access the given weights
+	contents, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	weights := &models.Weights{}
+	err = json.Unmarshal(contents, weights)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// Assign new weights to our user object
+	u.PostWeights = *weights
+
+	// Insert our user into the db
+	err = h.Driver.InsertUser(u)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 // Deletes the type of linked account for authenticated user in the request
@@ -350,6 +409,14 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Add the default weighting to the user struct
+	pw := models.Weights{}
+	pw.Reddit = DefaultRedditWeight
+	pw.Facebook = DefaultFacebookWeight
+	pw.HackerNews = DefaultHackerNewsWeight
+	pw.GoogleNews = DefaultGoogleNewsWeight
+	user.PostWeights = pw
+
 	handler.Driver.InsertUser(*user)
 	w.WriteHeader(http.StatusOK)
 }
@@ -363,6 +430,42 @@ func writePosts(w http.ResponseWriter, posts []models.Post) {
 		return
 	}
 	w.Write(res)
+}
+
+func getDefaultWeight(clientName string) float64 {
+	var val int
+
+	if clientName == "reddit" {
+		val = DefaultRedditWeight
+	} else if clientName == "facebook" {
+		val = DefaultFacebookWeight
+	} else if clientName == "hacker-news" {
+		val = DefaultHackerNewsWeight
+	} else if clientName == "google-news" {
+		val = DefaultGoogleNewsWeight
+	}
+
+	return float64(val)
+}
+
+func getWeight(clientName string, user *models.User) float64 {
+	if user == nil {
+		return getDefaultWeight(clientName)
+	}
+
+	var val int
+
+	if clientName == "reddit" {
+		val = user.PostWeights.Reddit
+	} else if clientName == "facebook" {
+		val = user.PostWeights.Facebook
+	} else if clientName == "hacker-news" {
+		val = user.PostWeights.HackerNews
+	} else if clientName == "google-news" {
+		val = user.PostWeights.GoogleNews
+	}
+
+	return float64(val)
 }
 
 // gets a list of content providers, one for each supported client. A content
@@ -382,7 +485,11 @@ func (handler *CoreHandler) getContentProviders(user *models.User) []*ranking.Co
 
 		numContentProviders++
 		go func(ch chan *ranking.ContentProvider) {
-			ch <- ranking.NewContentProvider(c.Weight(), generator)
+			println("about to get content")
+			// Sometimes user is nil when we are not authenticated
+			tw := getWeight(c.Name(), user)
+			println("got weight")
+			ch <- ranking.NewContentProvider(tw, generator)
 		}(ch)
 	}
 

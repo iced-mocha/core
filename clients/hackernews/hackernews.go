@@ -16,8 +16,8 @@ type HackerNews struct {
 	weight float64
 }
 
-func New(Host string, Port int, Weight float64) *HackerNews {
-	return &HackerNews{Host, Port, Weight}
+func New(host string, port int) *HackerNews {
+	return &HackerNews{Host: host, Port: port}
 }
 
 func (h *HackerNews) GetPageGenerator(user *models.User) (func() []models.Post, error) {
@@ -40,7 +40,7 @@ func (h *HackerNews) GetPageGenerator(user *models.User) (func() []models.Post, 
 }
 
 func (h *HackerNews) Name() string {
-	return "Hacker News"
+	return "hacker-news"
 }
 
 func (h *HackerNews) Weight() float64 {

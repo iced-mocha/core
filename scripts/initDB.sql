@@ -5,5 +5,9 @@ CREATE TABLE `UserInfo` (
 	`RedditUsername` VARCHAR(64) NULL,
 	`RedditAuthToken` VARCHAR(64) NULL,
 	`FacebookUsername` VARCHAR(64) NULL,
-	`FacebookAuthToken` VARCHAR(64) NULL
+	`FacebookAuthToken` VARCHAR(64) NULL,
+	`RedditWeight` INTEGER,
+	`FacebookWeight` INTEGER,
+	`HackerNewsWeight` INTEGER,
+	`GoogleNewsWeight` INTEGER
 );

@@ -17,8 +17,8 @@ type Reddit struct {
 	weight float64
 }
 
-func New(Host string, Port int, Weight float64) *Reddit {
-	return &Reddit{Host, Port, Weight}
+func New(host string, port int) *Reddit {
+	return &Reddit{Host: host, Port: port}
 }
 
 func (r *Reddit) GetPageGenerator(user *models.User) (func() []models.Post, error) {
@@ -51,7 +51,7 @@ func (r *Reddit) GetPageGenerator(user *models.User) (func() []models.Post, erro
 }
 
 func (r *Reddit) Name() string {
-	return "Reddit"
+	return "reddit"
 }
 
 func (r *Reddit) Weight() float64 {
@@ -80,7 +80,6 @@ func (r *Reddit) getPosts(url, redditToken string) clients.PostResponse {
 
 	clientResp := models.ClientResp{}
 	err = json.NewDecoder(redditResp.Body).Decode(&clientResp)
-	log.Printf("resp: \n%+v\n", clientResp)
 	posts = clientResp.Posts
 	if err != nil {
 		return clients.PostResponse{posts, "", fmt.Errorf("Unable to decode posts from Reddit: %v", err)}

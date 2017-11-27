@@ -18,11 +18,13 @@ type ContentProvider struct {
 }
 
 func NewContentProvider(weight float64, nextPage func() []models.Post) *ContentProvider {
+	println("in next pos 1")
 	c := &ContentProvider{
 		Weight:       weight,
 		NextPage:     nextPage,
 		nextPageChan: make(chan []models.Post, 1),
 	}
+	println("in next post 2")
 	c.NextPost()
 	return c
 }
