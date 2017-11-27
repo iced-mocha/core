@@ -485,10 +485,8 @@ func (handler *CoreHandler) getContentProviders(user *models.User) []*ranking.Co
 
 		numContentProviders++
 		go func(ch chan *ranking.ContentProvider) {
-			println("about to get content")
 			// Sometimes user is nil when we are not authenticated
 			tw := getWeight(c.Name(), user)
-			println("got weight")
 			ch <- ranking.NewContentProvider(tw, generator)
 		}(ch)
 	}
