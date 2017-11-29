@@ -167,6 +167,30 @@ func (d *driver) UsernameExists(username string) (bool, error) {
 	return true, nil
 }
 
+func (d *driver) UpdateWeights(username string, weights models.Weights) bool {
+	query := "UPDATE UserInfo SET RedditWeight=?, FacebookWeight=?, HackerNewsWeight=?, GoogleNewsWeight=? WHERE Username=?"
+	stmt, err := d.db.Prepare(query)
+	if err != nil {
+		log.Printf("Unable to prepare query to update reddit weights: %v", err)
+		return false
+	}
+
+	res, err := stmt.Exec(weights.Reddit, weights.Facebook, weights.HackerNews, weights.GoogleNews, username)
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+
+	// If the number of rows is greater than 0, then we have updated a user
+	return n > 0
+}
+
 // Updates information about a reddit account for a given userID
 func (d *driver) UpdateRedditAccount(username, redditUser, authToken string) bool {
 	query := "UPDATE UserInfo SET RedditUserName=?, RedditAuthToken=? where Username=?"

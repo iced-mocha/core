@@ -128,12 +128,12 @@ func (h *CoreHandler) UpdateWeights(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Assign new weights to our user object
-	u.PostWeights = *weights
+	log.Printf("Received the follow weights for user %v: %+v\n", u.Username, weights)
 
 	// Insert our user into the db
-	err = h.Driver.InsertUser(u)
-	if err != nil {
+	// This violates unique constraint
+	b := h.Driver.UpdateWeights(u.Username, *weights)
+	if !b {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

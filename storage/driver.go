@@ -11,6 +11,8 @@ type Driver interface {
 
 	GetRedditOAuthToken(userID string) (string, error)
 
+	UpdateWeights(username string, weights models.Weights) bool
+
 	UpdateRedditAccount(userID, redditUser, authToken string) bool
 
 	UpdateFacebookAccount(userID, facebookUser, authToken string) bool
