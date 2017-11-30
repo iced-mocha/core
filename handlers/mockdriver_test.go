@@ -26,4 +26,6 @@ func (m *MockDriver) UpdateFacebookAccount(userID, facebookUser, authToken strin
 	return true
 }
 
+func (m *MockDriver) UpdateWeights(username string, weights models.Weights) bool { return true }
+
 func (m *MockDriver) UpdateOAuthToken(userID, token, expiry string) bool { return true }
