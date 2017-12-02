@@ -254,11 +254,14 @@ func (handler *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
 
 func (handler *CoreHandler) IsLoggedIn(w http.ResponseWriter, r *http.Request) {
 	// First check to see if the user is already logged in
-	if handler.SessionManager.HasSession(r) {
-		w.Write([]byte(`{ "logged-in": true }`))
+	_, err := handler.SessionManager.GetSession(r)
+	if err != nil {
+		// Destroy the invalid session
+		handler.SessionManager.SessionDestroy(w, r)
+		w.Write([]byte(`{ "logged-in": false }`))
 		return
 	}
-	w.Write([]byte(`{ "logged-in": false }`))
+	w.Write([]byte(`{ "logged-in": true }`))
 }
 
 func (handler *CoreHandler) Logout(w http.ResponseWriter, r *http.Request) {
