@@ -5,3 +5,5 @@ Gopkg.lock
 # SQLite database files
 *.db
 !test.db
+server.key
+server.crt

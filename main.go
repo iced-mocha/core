@@ -15,6 +15,11 @@ import (
 	"github.com/patrickmn/go-cache"
 )
 
+const (
+	certFile = "server.crt"
+	keyFile  = "server.key"
+)
+
 func main() {
 	configFileName := "workspace.local.yml"
 
@@ -56,5 +61,16 @@ func main() {
 		log.Fatalf("error initializing server: %v", err)
 	}
 	http.Handle("/", s)
-	http.ListenAndServe(":3000", nil)
+
+	if !checkExists(certFile) || !checkExists(keyFile) {
+		panic("In order to run this program you must have a valid server.crt and servcer.key file run ./scripts/generateCert.sh")
+	}
+
+	// TODO: Server will silently fail if server.crt or server.key do not exists
+	http.ListenAndServeTLS(":3000", certFile, keyFile, nil)
+}
+
+func checkExists(filename string) bool {
+	_, err := os.Stat(filename)
+	return !os.IsNotExist(err)
 }
