@@ -1,0 +1,52 @@
+version: '3'
+services:
+  front-end:
+    image: icedmocha/front-end
+    ports:
+     - "8080:8080"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+  core:
+    image: icedmocha/core
+    ports:
+     - "3000:3000"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+  hacker-news-client:
+    image: icedmocha/hacker-news-client
+    ports:
+    - "4000:4000"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+  facebook-client:
+    image: icedmocha/facebook-client
+    ports:
+    - "5000:5000"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+  reddit-client:
+    image: icedmocha/reddit-client
+    ports:
+    - "3001:3001"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+  google-news-client:
+    image: icedmocha/google-news-client
+    ports:
+    - "7000:7000"
+    env_file:
+    - ../google-news-client/workspace.env
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
