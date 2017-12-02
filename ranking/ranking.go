@@ -12,7 +12,11 @@ func getRank(p *models.Post, weight float64, sequenceLength int) float64 {
 	ageMultiplier := math.Pow((age + time.Hour*12).Minutes(), 1.2)
 	sequenceMultiplier := math.Pow(float64(1+sequenceLength), 0.2)
 	randomMultiplier := rand.Float64()/10 + 1.0
-	return weight * ageMultiplier * sequenceMultiplier * randomMultiplier
+	multiplier := ageMultiplier * sequenceMultiplier * randomMultiplier
+	if multiplier <= 0 {
+		return 0
+	}
+	return weight * (1.0 / multiplier)
 }
 
 func getNextProviderIndex(providers []*ContentProvider) int {
@@ -25,7 +29,7 @@ func getNextProviderIndex(providers []*ContentProvider) int {
 		}
 
 		curRank := getRank(p.CurPost, p.Weight, p.sequenceLength)
-		if topProvider == -1 || curRank < topRank {
+		if topProvider == -1 || curRank > topRank {
 			topProvider = i
 			topRank = curRank
 		}
