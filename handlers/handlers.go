@@ -245,7 +245,11 @@ func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Requ
 // Redirects to our reddit client to authorize or service to use reddit account
 // GET /v1/user/{userID}/authorize/reddit
 func (handler *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "http://reddit-client:3001/v1/authorize", http.StatusFound)
+	userID := mux.Vars(r)["userID"]
+	// TODO rip out this config
+	host, _ := handler.Config.GetString("reddit.host")
+	port, _ := handler.Config.GetInt("reddit.port")
+	http.Redirect(w, r, "http://"+host+":"+strconv.Itoa(port)+"/v1/"+userID+"/authorize", http.StatusFound)
 }
 
 func (handler *CoreHandler) IsLoggedIn(w http.ResponseWriter, r *http.Request) {
