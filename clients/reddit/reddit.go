@@ -2,8 +2,11 @@ package reddit
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 
@@ -15,10 +18,34 @@ type Reddit struct {
 	Host   string
 	Port   int
 	weight float64
+	client *http.Client
 }
 
 func New(host string, port int) *Reddit {
-	return &Reddit{Host: host, Port: port}
+	// Load reddit-clients certifiate so we know we can trust reddit-client
+	caCert, err := ioutil.ReadFile("/etc/ssl/certs/reddit.crt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+	println("loading key pair")
+	// Load our own certs
+	cert, err := tls.LoadX509KeyPair("/etc/ssl/certs/core.crt", "/etc/ssl/private/core.key")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				//InsecureSkipVerify: true,
+				RootCAs:      caCertPool,
+				Certificates: []tls.Certificate{cert},
+			},
+		},
+	}
+	return &Reddit{Host: host, Port: port, client: client}
 }
 
 func (r *Reddit) GetPageGenerator(user *models.User) (func() []models.Post, error) {
@@ -60,7 +87,6 @@ func (r *Reddit) Weight() float64 {
 
 func (r *Reddit) getPosts(url, redditToken string) clients.PostResponse {
 	posts := []models.Post{}
-	client := &http.Client{}
 	log.Printf("Token:%v\n", redditToken)
 	jsonString := []byte(fmt.Sprintf("{ \"bearertoken\": \"%v\"}", redditToken))
 	req, err := http.NewRequest(http.MethodGet, url, bytes.NewBuffer(jsonString))
@@ -68,7 +94,7 @@ func (r *Reddit) getPosts(url, redditToken string) clients.PostResponse {
 		return clients.PostResponse{posts, "", err}
 	}
 
-	redditResp, err := client.Do(req)
+	redditResp, err := r.client.Do(req)
 	if err != nil {
 		return clients.PostResponse{posts, "", fmt.Errorf("Unable to get posts from reddit: %v", err)}
 	}

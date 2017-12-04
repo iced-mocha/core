@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -60,14 +63,32 @@ func main() {
 	if err != nil {
 		log.Fatalf("error initializing server: %v", err)
 	}
-	http.Handle("/", s)
+	//http.Handle("/", s)
 
-	if !checkExists(certFile) || !checkExists(keyFile) {
-		panic("In order to run this program you must have a valid server.crt and servcer.key file run ./scripts/generateCert.sh")
+	// Make sure we accept any certificates that need to communicate with us
+	caCert, err := ioutil.ReadFile("/etc/ssl/certs/reddit.crt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	feCert, err := ioutil.ReadFile("/etc/ssl/certs/frontend.crt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+	caCertPool.AppendCertsFromPEM(feCert)
+	cfg := &tls.Config{
+		//		ClientAuth: tls.RequireAndVerifyClientCert,
+		ClientCAs: caCertPool,
+	}
+	srv := &http.Server{
+		Addr:      ":3000",
+		Handler:   s,
+		TLSConfig: cfg,
 	}
 
 	// TODO: Server will silently fail if server.crt or server.key do not exists
-	http.ListenAndServeTLS(":3000", certFile, keyFile, nil)
+	srv.ListenAndServeTLS("/etc/ssl/certs/core.crt", "/etc/ssl/private/core.key")
 }
 
 func checkExists(filename string) bool {
