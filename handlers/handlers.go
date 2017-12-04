@@ -25,10 +25,10 @@ import (
 )
 
 const (
-	DefaultRedditWeight     = 2.0
-	DefaultFacebookWeight   = 1.0
-	DefaultHackerNewsWeight = 2.0
-	DefaultGoogleNewsWeight = 4.0
+	DefaultRedditWeight     = 20.0
+	DefaultFacebookWeight   = 10.0
+	DefaultHackerNewsWeight = 20.0
+	DefaultGoogleNewsWeight = 40.0
 )
 
 type CoreHandler struct {
