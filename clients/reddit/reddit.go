@@ -26,11 +26,11 @@ func (r *Reddit) GetPageGenerator(user *models.User) (func() []models.Post, erro
 	var nextURL string
 	if user == nil || user.RedditUsername == "" {
 		authToken = ""
-		nextURL = fmt.Sprintf("http://%v:%v/v1/posts", r.Host, r.Port)
+		nextURL = fmt.Sprintf("https://%v:%v/v1/posts", r.Host, r.Port)
 	} else {
 		authToken = user.RedditAuthToken
 		// TODO: Eventually we will first have to check if the reddit token will expire
-		nextURL = fmt.Sprintf("http://%v:%v/v1/%v/posts", r.Host, r.Port, user.RedditUsername)
+		nextURL = fmt.Sprintf("https://%v:%v/v1/%v/posts", r.Host, r.Port, user.RedditUsername)
 	}
 	getNextPage := func() []models.Post {
 		if nextURL == "" {
