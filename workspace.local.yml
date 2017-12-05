@@ -4,6 +4,7 @@ facebook:
     host: "0.0.0.0"
     port: 5000
 reddit:
+    external-host: "localhost"
     host: "localhost"
     port: 3001
 hacker-news:
