@@ -27,7 +27,7 @@ func (suite *DriverTestSuite) SetupSuite() {
 	var err error
 
 	// Note it is assumed an initialized test.db file exists within the test/ directory
-	suite.d, err = New(Config{testDatabaseName})
+	suite.d, err = New(Config{DatabasePath: testDatabaseName})
 	if err != nil {
 		log.Printf("Unable to create db object: %v\n", err)
 	}
