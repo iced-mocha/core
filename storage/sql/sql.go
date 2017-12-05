@@ -1,4 +1,4 @@
-package sqlite
+package sql
 
 import (
 	"database/sql"
@@ -6,13 +6,14 @@ import (
 	"log"
 	"reflect"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/iced-mocha/shared/models"
 	_ "github.com/mattn/go-sqlite3"
 	_ "github.com/twinj/uuid"
 )
 
 const (
-	databaseFile   = "./database.db"
+	databasePath   = "./database.db"
 	databaseDriver = "sqlite3"
 )
 
@@ -274,16 +275,23 @@ func (d *driver) UpdateOAuthToken(username, token, expiry string) bool {
 
 // Creates a new driver containing pointer to sqlite db object
 func New(config Config) (*driver, error) {
-	var filename string
+	var dbPath string
+	var dbDriver string
 
 	// If we are provided a database file via the config object use it. Otherwise default
-	if config.DatabaseFile == "" {
-		filename = databaseFile
+	if config.DatabasePath == "" {
+		dbPath = databasePath
 	} else {
-		filename = config.DatabaseFile
+		dbPath = config.DatabasePath
 	}
 
-	db, err := sql.Open(databaseDriver, filename)
+	if config.DatabaseDriver == "" {
+		dbDriver = databaseDriver
+	} else {
+		dbDriver = config.DatabaseDriver
+	}
+
+	db, err := sql.Open(dbDriver, dbPath)
 	if err != nil {
 		return nil, err
 	}

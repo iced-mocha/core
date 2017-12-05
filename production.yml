@@ -12,6 +12,8 @@ services:
     image: icedmocha/core
     ports:
      - "3000:3000"
+    env_file:
+    - workspace.env
     deploy:
       replicas: 1
       restart_policy:

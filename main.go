@@ -11,7 +11,7 @@ import (
 	"github.com/iced-mocha/core/server"
 	"github.com/iced-mocha/core/sessions"
 	_ "github.com/iced-mocha/core/sessions/memory"
-	"github.com/iced-mocha/core/storage/sqlite"
+	"github.com/iced-mocha/core/storage/sql"
 	"github.com/patrickmn/go-cache"
 )
 
@@ -36,7 +36,11 @@ func main() {
 	}
 
 	// Create our storage driver
-	driver, err := sqlite.New(sqlite.Config{})
+	driver, err := sql.New(sql.Config{
+		DatabasePath:   os.Getenv("DATABASE_PATH"),
+		DatabaseDriver: os.Getenv("DATABASE_TYPE"),
+	})
+
 	if err != nil {
 		log.Fatalf("Unable to create driver: %v", err)
 	}

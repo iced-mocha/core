@@ -460,7 +460,7 @@ func getWeight(clientName string, user *models.User) float64 {
 		return getDefaultWeight(clientName)
 	}
 
-	var val int
+	var val float64
 
 	if clientName == "reddit" {
 		val = user.PostWeights.Reddit
