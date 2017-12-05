@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"log"
 	"net/http"
 	"os"
@@ -64,14 +65,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("error initializing server: %v", err)
 	}
-	http.Handle("/", s)
 
-	if !checkExists(certFile) || !checkExists(keyFile) {
-		panic("In order to run this program you must have a valid server.crt and servcer.key file run ./scripts/generateCert.sh")
+	srv := &http.Server{
+		Addr:      ":3000",
+		Handler:   s,
+		TLSConfig: &tls.Config{},
 	}
 
 	// TODO: Server will silently fail if server.crt or server.key do not exists
-	http.ListenAndServeTLS(":3000", certFile, keyFile, nil)
+	srv.ListenAndServeTLS("/etc/ssl/certs/core.crt", "/etc/ssl/private/core.key")
 }
 
 func checkExists(filename string) bool {

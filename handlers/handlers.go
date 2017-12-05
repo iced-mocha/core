@@ -247,7 +247,7 @@ func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Requ
 func (handler *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
 	userID := mux.Vars(r)["userID"]
 	// TODO rip out this config
-	host, _ := handler.Config.GetString("reddit.external-host")
+	host, _ := handler.Config.GetString("reddit.host")
 	port, _ := handler.Config.GetInt("reddit.port")
 	http.Redirect(w, r, "https://"+host+":"+strconv.Itoa(port)+"/v1/"+userID+"/authorize", http.StatusFound)
 }
