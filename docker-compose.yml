@@ -5,15 +5,16 @@ services:
     ports:
      - "443:443"
     volumes:
-     - /etc/ssl/certs/frontend.crt:/etc/ssl/certs/frontend.crt
-     - /etc/ssl/private/frontend.key:/etc/ssl/private/frontend.key
+     - /usr/local/etc/ssl/certs/frontend.crt:/usr/local/etc/ssl/certs/frontend.crt
+     - /usr/local/etc/ssl/private/frontend.key:/usr/local/etc/ssl/private/frontend.key
   core:
     build: .
     ports:
      - "3000:3000"
     volumes:
-     - /etc/ssl/certs/core.crt:/etc/ssl/certs/core.crt
-     - /etc/ssl/private/core.key:/etc/ssl/private/core.key
+     - /usr/local/etc/ssl/certs/reddit.crt:/usr/local/etc/ssl/certs/reddit.crt
+     - /usr/local/etc/ssl/certs/core.crt:/usr/local/etc/ssl/certs/core.crt
+     - /usr/local/etc/ssl/private/core.key:/usr/local/etc/ssl/private/core.key
   hacker-news-client:
     build: ../hacker-news-client
     ports:
@@ -27,8 +28,9 @@ services:
     ports:
     - "3001:3001"
     volumes:
-     - /etc/ssl/certs/reddit.crt:/etc/ssl/certs/reddit.crt
-     - /etc/ssl/private/reddit.key:/etc/ssl/private/reddit.key
+     - /usr/local/etc/ssl/certs/core.crt:/usr/local/etc/ssl/certs/core.crt
+     - /usr/local/etc/ssl/certs/reddit.crt:/usr/local/etc/ssl/certs/reddit.crt
+     - /usr/local/etc/ssl/private/reddit.key:/usr/local/etc/ssl/private/reddit.key
   google-news-client:
     build: ../google-news-client
     ports:

@@ -23,25 +23,18 @@ type Reddit struct {
 
 func New(host string, port int) *Reddit {
 	// Load reddit-clients certifiate so we know we can trust reddit-client
-	caCert, err := ioutil.ReadFile("/etc/ssl/certs/reddit.crt")
+	caCert, err := ioutil.ReadFile("/usr/local/etc/ssl/certs/reddit.crt")
 	if err != nil {
 		log.Fatal(err)
 	}
 	caCertPool := x509.NewCertPool()
 	caCertPool.AppendCertsFromPEM(caCert)
-	println("loading key pair")
-	// Load our own certs
-	cert, err := tls.LoadX509KeyPair("/etc/ssl/certs/core.crt", "/etc/ssl/private/core.key")
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				//InsecureSkipVerify: true,
-				RootCAs:      caCertPool,
-				Certificates: []tls.Certificate{cert},
+				RootCAs: caCertPool,
 			},
 		},
 	}
