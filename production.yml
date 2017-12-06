@@ -11,6 +11,8 @@ services:
     volumes:
      - /etc/ssl/certs/frontend.crt:/etc/ssl/certs/frontend.crt
      - /etc/ssl/private/frontend.key:/etc/ssl/private/frontend.key
+    logging:
+      driver: json-file
   core:
     image: icedmocha/core
     ports:
@@ -24,6 +26,8 @@ services:
     volumes:
      - /etc/ssl/certs/core.crt:/etc/ssl/certs/core.crt
      - /etc/ssl/private/core.key:/etc/ssl/private/core.key
+    logging:
+      driver: json-file
   hacker-news-client:
     image: icedmocha/hacker-news-client
     ports:
@@ -32,6 +36,8 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
+    logging:
+      driver: json-file
   facebook-client:
     image: icedmocha/facebook-client
     ports:
@@ -40,6 +46,8 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
+    logging:
+      driver: json-file
   reddit-client:
     image: icedmocha/reddit-client
     ports:
@@ -51,6 +59,8 @@ services:
     volumes:
      - /etc/ssl/certs/reddit.crt:/etc/ssl/certs/reddit.crt
      - /etc/ssl/private/reddit.key:/etc/ssl/private/reddit.key
+    logging:
+      driver: json-file
   google-news-client:
     image: icedmocha/google-news-client
     ports:
@@ -61,3 +71,5 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
+    logging:
+      driver: json-file
