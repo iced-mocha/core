@@ -1,0 +1,12 @@
+FROM icedmocha/core-base:latest
+
+WORKDIR /go/src/github.com/iced-mocha/core
+COPY . /go/src/github.com/iced-mocha/core
+
+RUN rm workspace.docker.yml
+RUN mv workspace.prod.yml workspace.docker.yml
+
+RUN dep ensure -v && go install -v
+RUN ./scripts/setup.sh
+
+ENTRYPOINT ["core"]
