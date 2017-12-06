@@ -3,11 +3,17 @@ services:
   front-end:
     build: ../front-end
     ports:
-     - "8080:8080"
+     - "443:443"
+    volumes:
+     - /etc/ssl/certs/frontend.crt:/etc/ssl/certs/frontend.crt
+     - /etc/ssl/private/frontend.key:/etc/ssl/private/frontend.key
   core:
     build: .
     ports:
      - "3000:3000"
+    volumes:
+     - /etc/ssl/certs/core.crt:/etc/ssl/certs/core.crt
+     - /etc/ssl/private/core.key:/etc/ssl/private/core.key
   hacker-news-client:
     build: ../hacker-news-client
     ports:
@@ -20,6 +26,9 @@ services:
     build: ../reddit-client
     ports:
     - "3001:3001"
+    volumes:
+     - /etc/ssl/certs/reddit.crt:/etc/ssl/certs/reddit.crt
+     - /etc/ssl/private/reddit.key:/etc/ssl/private/reddit.key
   google-news-client:
     build: ../google-news-client
     ports:

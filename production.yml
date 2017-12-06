@@ -3,11 +3,14 @@ services:
   front-end:
     image: icedmocha/front-end
     ports:
-     - "8080:8080"
+     - "443:443"
     deploy:
       replicas: 1
       restart_policy:
         condition: on-failure
+    volumes:
+     - /etc/ssl/certs/frontend.crt:/etc/ssl/certs/frontend.crt
+     - /etc/ssl/private/frontend.key:/etc/ssl/private/frontend.key
   core:
     image: icedmocha/core
     ports:
@@ -18,6 +21,9 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
+    volumes:
+     - /etc/ssl/certs/core.crt:/etc/ssl/certs/core.crt
+     - /etc/ssl/private/core.key:/etc/ssl/private/core.key
   hacker-news-client:
     image: icedmocha/hacker-news-client
     ports:
@@ -42,6 +48,9 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
+    volumes:
+     - /etc/ssl/certs/reddit.crt:/etc/ssl/certs/reddit.crt
+     - /etc/ssl/private/reddit.key:/etc/ssl/private/reddit.key
   google-news-client:
     image: icedmocha/google-news-client
     ports:
