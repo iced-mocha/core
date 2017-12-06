@@ -73,7 +73,7 @@ func main() {
 	}
 
 	// TODO: Server will silently fail if server.crt or server.key do not exists
-	srv.ListenAndServeTLS("/usr/local/etc/ssl/certs/core.crt", "/usr/local/etc/ssl/private/core.key")
+	log.Fatal(srv.ListenAndServeTLS("/usr/local/etc/ssl/certs/core.crt", "/usr/local/etc/ssl/private/core.key"))
 }
 
 func checkExists(filename string) bool {

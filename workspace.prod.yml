@@ -4,7 +4,7 @@ facebook:
     host: "facebook-client"
     port: 5000
 reddit:
-    external-host:"https://ec2-18-220-185-156.us-east-2.compute.amazonaws.com"
+    external-host: "https://ec2-18-220-185-156.us-east-2.compute.amazonaws.com"
     host: "reddit-client"
     port: 3001
 hacker-news:

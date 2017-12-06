@@ -9,8 +9,8 @@ services:
       restart_policy:
         condition: on-failure
     volumes:
-     - /usr/local/etc/ssl/certs/frontend.crt:/usr/local/etc/ssl/certs/frontend.crt
-     - /usr/local/etc/ssl/private/frontend.key:/usr/local/etc/ssl/private/frontend.key
+     - /home/docker/ssl/certs/frontend.crt:/usr/local/etc/ssl/certs/frontend.crt
+     - /home/docker/ssl/private/frontend.key:/usr/local/etc/ssl/private/frontend.key
     logging:
       driver: json-file
   core:
@@ -24,9 +24,9 @@ services:
       restart_policy:
         condition: on-failure
     volumes:
-     - /usr/local/etc/ssl/certs/reddit.crt:/usr/local/etc/ssl/certs/reddit.crt
-     - /usr/local/etc/ssl/certs/core.crt:/usr/local/etc/ssl/certs/core.crt
-     - /usr/local/etc/ssl/private/core.key:/usr/local/etc/ssl/private/core.key
+     - /home/docker/ssl/certs/reddit.crt:/usr/local/etc/ssl/certs/reddit.crt
+     - /home/docker/ssl/certs/core.crt:/usr/local/etc/ssl/certs/core.crt
+     - /home/docker/ssl/private/core.key:/usr/local/etc/ssl/private/core.key
     logging:
       driver: json-file
   hacker-news-client:
@@ -58,9 +58,9 @@ services:
       restart_policy:
         condition: on-failure
     volumes:
-     - /usr/local/etc/ssl/certs/core.crt:/usr/local/etc/ssl/certs/core.crt
-     - /usr/local/etc/ssl/certs/reddit.crt:/usr/local/etc/ssl/certs/reddit.crt
-     - /usr/local/etc/ssl/private/reddit.key:/usr/local/etc/ssl/private/reddit.key
+     - /home/docker/ssl/certs/core.crt:/usr/local/etc/ssl/certs/core.crt
+     - /home/docker/ssl/certs/reddit.crt:/usr/local/etc/ssl/certs/reddit.crt
+     - /home/docker/ssl/private/reddit.key:/usr/local/etc/ssl/private/reddit.key
     logging:
       driver: json-file
   google-news-client:
