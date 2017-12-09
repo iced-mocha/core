@@ -4,7 +4,7 @@ facebook:
     host: "facebook-client"
     port: 5000
 reddit:
-    host: "iced-mocha.com"
+    host: "reddit-client"
     port: 3001
 hacker-news:
     host: "hacker-news-client"
@@ -12,3 +12,4 @@ hacker-news:
 google-news:
     host: "google-news-client"
     port: 7000
+siteurl: "iced-mocha.com"
