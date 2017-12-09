@@ -33,7 +33,6 @@ func New(host string, port int) *Reddit {
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				//InsecureSkipVerify: true,
 				RootCAs: caCertPool,
 			},
 		},
