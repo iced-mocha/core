@@ -9,6 +9,7 @@ import (
 
 	"github.com/iced-mocha/core/config/yaml"
 	"github.com/iced-mocha/core/handlers"
+	_ "github.com/iced-mocha/core/logging"
 	"github.com/iced-mocha/core/server"
 	"github.com/iced-mocha/core/sessions"
 	_ "github.com/iced-mocha/core/sessions/memory"
