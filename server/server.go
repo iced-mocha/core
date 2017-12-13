@@ -26,6 +26,8 @@ func New(api handlers.CoreAPI) (*Server, error) {
 
 	s.Router.HandleFunc("/v1/users/accounts/{type}", api.DeleteLinkedAccount).Methods("DELETE")
 
+	s.Router.HandleFunc("/v1/users/{userID}/authorize/twitter", api.TwitterAuth).Methods("GET")
+	s.Router.HandleFunc("/v1/users/{userID}/authorize/twitter", api.UpdateTwitterAuth).Methods("POST")
 	s.Router.HandleFunc("/v1/users/{userID}/authorize/reddit", api.RedditAuth).Methods("GET")
 	s.Router.HandleFunc("/v1/users/{userID}/authorize/reddit", api.UpdateRedditAuth).Methods("POST")
 	s.Router.HandleFunc("/v1/users/{userID}/authorize/facebook", api.UpdateFacebookAuth).Methods("POST")

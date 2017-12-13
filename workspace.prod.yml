@@ -4,8 +4,11 @@ facebook:
     host: "facebook-client"
     port: 5000
 reddit:
-    host: "reddit-client"
+    host: "www.iced-mocha.com"
     port: 3001
+twitter:
+    host: "www.iced-mocha.com"
+    port: 3002
 hacker-news:
     host: "hacker-news-client"
     port: 4000

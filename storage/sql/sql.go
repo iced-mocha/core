@@ -93,6 +93,36 @@ func (d *driver) GetRedditOAuthToken(username string) (string, error) {
 	return RedditAuthToken, nil
 }
 
+func (d *driver) GetTwitterSecrets(username string) (string, string, error) {
+	log.Printf("Attempting to get twitter secrets for user: %v", username)
+
+	stmt, err := d.db.Prepare("SELECT TwitterAuthToken, TwitterSecret FROM UserInfo WHERE Username=?")
+	if err != nil {
+		log.Println(err)
+		return "", "", err
+	}
+
+	rows, err := stmt.Query(username)
+	if err != nil {
+		log.Println(err)
+		return "", "", err
+	}
+	// This is need to prevent database locking
+	defer rows.Close()
+
+	// Try to get the first and hopefully only result from the query
+	if !rows.Next() {
+		log.Printf("Could not find user in DB: %v\n", username)
+		return "", "", errors.New("No user found in database with given username: " + username)
+	}
+
+	var TwitterAuthToken, TwitterSecret string
+	rows.Scan(&TwitterAuthToken, &TwitterSecret)
+
+	log.Printf("Successfully twitter token and secret for user %v.", username)
+	return TwitterAuthToken, TwitterSecret, nil
+}
+
 // Attempts to get the user with the given username from the database
 // Returns the user (if any), whether or not that user exists (bool) and a potential error
 func (d *driver) GetUser(username string) (models.User, bool, error) {
@@ -122,15 +152,18 @@ func (d *driver) GetUser(username string) (models.User, bool, error) {
 
 	// Scan the select Row into our user struct
 	// NOTE: It is import that this is kept up to date with database schema
-	var redditUsername, redditAuthToken, facebookUsername, facebookAuthToken NullString
+	var twitterUsername, twitterAuthToken, twitterSecret, redditUsername, redditAuthToken, facebookUsername, facebookAuthToken NullString
 	weights := models.Weights{}
-	err = rows.Scan(&user.ID, &user.Username, &user.Password, &redditUsername, &redditAuthToken,
+	err = rows.Scan(&user.ID, &user.Username, &user.Password, &twitterUsername, &twitterAuthToken, &twitterSecret, &redditUsername, &redditAuthToken,
 		&facebookUsername, &facebookAuthToken, &weights.Reddit, &weights.Facebook, &weights.HackerNews, &weights.GoogleNews)
 	if err != nil {
 		log.Printf("Unable to get users: %v", err)
 		return user, false, err
 	}
 
+	user.TwitterUsername = twitterUsername.String
+	user.TwitterAuthToken = twitterAuthToken.String
+	user.TwitterSecret = twitterSecret.String
 	user.RedditUsername = redditUsername.String
 	user.RedditAuthToken = redditAuthToken.String
 	user.FacebookUsername = facebookUsername.String
@@ -203,6 +236,32 @@ func (d *driver) UpdateRedditAccount(username, redditUser, authToken string) boo
 	}
 
 	res, err := stmt.Exec(redditUser, authToken, username)
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+
+	// If the number of rows is greater than 0, then we have updated a user
+	return n > 0
+}
+
+// Updates information about a reddit account for a given userID
+func (d *driver) UpdateTwitterAccount(username, twitterUser, authToken, secret string) bool {
+	query := "UPDATE UserInfo SET TwitterUserName=?, TwitterAuthToken=?, TwitterSecret=? where Username=?"
+
+	stmt, err := d.db.Prepare(query)
+	if err != nil {
+		log.Printf("Unable to prepare query to update twitter account: %v", err)
+		return false
+	}
+
+	res, err := stmt.Exec(twitterUser, authToken, secret, username)
 	if err != nil {
 		log.Println(err)
 		return false

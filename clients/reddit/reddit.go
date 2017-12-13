@@ -79,7 +79,6 @@ func (r *Reddit) Weight() float64 {
 
 func (r *Reddit) getPosts(url, redditToken string) clients.PostResponse {
 	posts := []models.Post{}
-	log.Printf("Reddit token:%v\n", redditToken)
 	jsonString := []byte(fmt.Sprintf("{ \"bearertoken\": \"%v\"}", redditToken))
 	req, err := http.NewRequest(http.MethodGet, url, bytes.NewBuffer(jsonString))
 	if err != nil {

@@ -7,6 +7,9 @@ reddit:
     external-host: "localhost"
     host: "localhost"
     port: 3001
+twitter:
+    host: "localhost"
+    port: 3002
 hacker-news:
     host: "0.0.0.0"
     port: 4000

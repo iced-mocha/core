@@ -22,6 +22,10 @@ func (m *MockDriver) UpdateRedditAccount(userID, redditUser, authToken string) b
 	return true
 }
 
+func (m *MockDriver) UpdateTwitterAccount(userID, redditUser, authToken, secret string) bool {
+	return true
+}
+
 func (m *MockDriver) UpdateFacebookAccount(userID, facebookUser, authToken string) bool {
 	return true
 }

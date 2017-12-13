@@ -15,6 +15,8 @@ type Driver interface {
 
 	UpdateRedditAccount(userID, redditUser, authToken string) bool
 
+	UpdateTwitterAccount(userID, twitterUser, authToken, secret string) bool
+
 	UpdateFacebookAccount(userID, facebookUser, authToken string) bool
 
 	UpdateOAuthToken(userID, token, expiry string) bool

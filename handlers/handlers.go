@@ -14,6 +14,7 @@ import (
 	"github.com/iced-mocha/core/clients/googlenews"
 	"github.com/iced-mocha/core/clients/hackernews"
 	"github.com/iced-mocha/core/clients/reddit"
+	"github.com/iced-mocha/core/clients/twitter"
 	"github.com/iced-mocha/core/config"
 	"github.com/iced-mocha/core/creds"
 	"github.com/iced-mocha/core/ranking"
@@ -26,6 +27,7 @@ import (
 
 const (
 	DefaultRedditWeight     = 20.0
+	DefaultTwitterWeight    = 20.0
 	DefaultFacebookWeight   = 10.0
 	DefaultHackerNewsWeight = 20.0
 	DefaultGoogleNewsWeight = 40.0
@@ -49,6 +51,7 @@ type ProviderAuth struct {
 	Username     string `json:"username"`
 	Token        string `json:"token"`
 	RefreshToken string `json:"refresh-token"`
+	Secret       string `json:"secret"`
 }
 
 func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cache) (*CoreHandler, error) {
@@ -70,21 +73,22 @@ func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cac
 	// TODO Find a better way to do this
 	// Maybe create a GetStringKeys function that returns array of values and a potential error
 
-	hosts, err := handler.Config.GetStrings([]string{"hacker-news.host", "facebook.host", "reddit.host", "google-news.host"})
+	hosts, err := handler.Config.GetStrings([]string{"hacker-news.host", "facebook.host", "reddit.host", "google-news.host", "twitter.host"})
 	if err != nil {
 		return nil, err
 	}
 
-	ports, err := handler.Config.GetInts([]string{"hacker-news.port", "facebook.port", "reddit.port", "google-news.port"})
+	ports, err := handler.Config.GetInts([]string{"hacker-news.port", "facebook.port", "reddit.port", "google-news.port", "twitter.port"})
 	if err != nil {
 		return nil, err
 	}
 
-	handler.Clients = make([]clients.Client, 4)
+	handler.Clients = make([]clients.Client, 5)
 	handler.Clients[0] = hackernews.New(hosts[0], ports[0])
 	handler.Clients[1] = facebook.New(hosts[1], ports[1])
 	handler.Clients[2] = reddit.New(hosts[2], ports[2])
 	handler.Clients[3] = googlenews.New(hosts[3], ports[3])
+	handler.Clients[4] = twitter.New(hosts[4], ports[4])
 
 	return handler, nil
 }
@@ -168,6 +172,8 @@ func (h *CoreHandler) DeleteLinkedAccount(w http.ResponseWriter, r *http.Request
 		h.Driver.UpdateRedditAccount(username, "", "")
 	} else if t == "facebook" {
 		h.Driver.UpdateFacebookAccount(username, "", "")
+	} else if t == "twitter" {
+		h.Driver.UpdateTwitterAccount(username, "", "", "")
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -202,6 +208,41 @@ func (handler *CoreHandler) UpdateFacebookAuth(w http.ResponseWriter, r *http.Re
 	}
 
 	successful := handler.Driver.UpdateFacebookAccount(id, auth.Username, auth.Token)
+	if !successful {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+// Updates the twitter oauth token and secret stored for a user with id <userID>
+// POST /v1/user/{userID}/authorize/twitter
+func (handler *CoreHandler) UpdateTwitterAuth(w http.ResponseWriter, r *http.Request) {
+	// TODO: We are currently not verifying that the user requesting this is in fact allowed to do so
+
+	// Read body of the request
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Error reading body: %v", err)
+		http.Error(w, "can't read body", http.StatusBadRequest)
+		return
+	}
+
+	// Get the user id from path paramater
+	id := mux.Vars(r)["userID"]
+
+	// Change the body into a user object
+	auth := &ProviderAuth{}
+	err = json.Unmarshal(body, auth)
+	if err != nil {
+		log.Printf("Error parsing request body when updating reddit auth for user: %v - %v", id, err)
+		http.Error(w, "can't parse body", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("received the following twitter auth: %+v", auth)
+
+	successful := handler.Driver.UpdateTwitterAccount(id, auth.Username, auth.Token, auth.Secret)
 	if !successful {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -249,6 +290,16 @@ func (handler *CoreHandler) RedditAuth(w http.ResponseWriter, r *http.Request) {
 	// TODO rip out this config
 	host, _ := handler.Config.GetString("reddit.host")
 	port, _ := handler.Config.GetInt("reddit.port")
+	http.Redirect(w, r, "https://"+host+":"+strconv.Itoa(port)+"/v1/"+userID+"/authorize", http.StatusMovedPermanently)
+}
+
+// Redirects to our twitter client to authorize our service to use the users twitter account
+// GET /v1/user/{userID}/authorize/twitter
+func (handler *CoreHandler) TwitterAuth(w http.ResponseWriter, r *http.Request) {
+	userID := mux.Vars(r)["userID"]
+	// TODO rip out this config
+	host, _ := handler.Config.GetString("twitter.host")
+	port, _ := handler.Config.GetInt("twitter.port")
 	http.Redirect(w, r, "https://"+host+":"+strconv.Itoa(port)+"/v1/"+userID+"/authorize", http.StatusMovedPermanently)
 }
 
@@ -422,6 +473,7 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 	pw.Facebook = DefaultFacebookWeight
 	pw.HackerNews = DefaultHackerNewsWeight
 	pw.GoogleNews = DefaultGoogleNewsWeight
+	pw.Twitter = DefaultTwitterWeight
 	user.PostWeights = pw
 
 	handler.Driver.InsertUser(*user)
@@ -450,6 +502,8 @@ func getDefaultWeight(clientName string) float64 {
 		val = DefaultHackerNewsWeight
 	} else if clientName == "google-news" {
 		val = DefaultGoogleNewsWeight
+	} else if clientName == "twitter" {
+		val = DefaultTwitterWeight
 	}
 
 	return float64(val)
@@ -470,6 +524,8 @@ func getWeight(clientName string, user *models.User) float64 {
 		val = user.PostWeights.HackerNews
 	} else if clientName == "google-news" {
 		val = user.PostWeights.GoogleNews
+	} else if clientName == "twitter" {
+		val = user.PostWeights.Twitter
 	}
 
 	return float64(val)
@@ -528,12 +584,20 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 
 func (handler *CoreHandler) getPostsForUser(user *models.User, w http.ResponseWriter, r *http.Request) {
 	var providers []*ranking.ContentProvider
-	query := r.URL.Query()
-	if token, ok := query["page_token"]; ok && len(token) != 0 {
-		if p, ok := handler.Cache.Get(token[0]); ok {
-			providers = p.([]*ranking.ContentProvider)
+
+	// TODO: Put this inner part into its own function
+	token := r.FormValue("page_token")
+	if token != "" {
+		if p, ok := handler.Cache.Get(token); ok {
+			providers, ok = p.([]*ranking.ContentProvider)
+			if !ok {
+				http.Error(w, "data for page token malformed", http.StatusNotFound)
+				log.Printf("Data associated to page token: %v malformed", token)
+				return
+			}
 		} else {
-			http.Error(w, "Data for page token not found", http.StatusNotFound)
+			http.Error(w, "data for page token not found", http.StatusNotFound)
+			log.Printf("Unable to find data associated to page token: %v", token)
 			return
 		}
 	} else {
@@ -543,9 +607,11 @@ func (handler *CoreHandler) getPostsForUser(user *models.User, w http.ResponseWr
 	posts := ranking.GetPosts(providers, 20)
 	pageToken := handler.getNextPagingToken()
 	handler.Cache.Set(pageToken, providers, cache.DefaultExpiration)
+	log.Printf("Received %v posts from content providers", len(posts))
 
 	w.Header().Set("Content-Type", "application/json")
 	res, err := json.Marshal(
+		// TODO define this outside this function
 		struct {
 			Posts     []models.Post `json:"posts"`
 			PageToken string        `json:"page_token"`
