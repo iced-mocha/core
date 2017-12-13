@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -582,26 +583,33 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	handler.getPostsForUser(&user, w, r)
 }
 
-func (handler *CoreHandler) getPostsForUser(user *models.User, w http.ResponseWriter, r *http.Request) {
-	var providers []*ranking.ContentProvider
-
-	// TODO: Put this inner part into its own function
+func (handler *CoreHandler) GetProviders(user *models.User, r *http.Request) ([]*ranking.ContentProvider, error) {
 	token := r.FormValue("page_token")
 	if token != "" {
 		if p, ok := handler.Cache.Get(token); ok {
-			providers, ok = p.([]*ranking.ContentProvider)
+			providers, ok := p.([]*ranking.ContentProvider)
 			if !ok {
-				http.Error(w, "data for page token malformed", http.StatusNotFound)
 				log.Printf("Data associated to page token: %v malformed", token)
-				return
+				return nil, errors.New("malformed paging data")
 			}
-		} else {
-			http.Error(w, "data for page token not found", http.StatusNotFound)
-			log.Printf("Unable to find data associated to page token: %v", token)
-			return
+
+			// Able to retrieve providers from cache
+			return providers, nil
 		}
-	} else {
-		providers = handler.getContentProviders(user)
+
+		log.Printf("Unable to find data associated to page token: %v", token)
+		return nil, errors.New("data associated with page token not found")
+	}
+
+	return handler.getContentProviders(user), nil
+}
+
+func (handler *CoreHandler) getPostsForUser(user *models.User, w http.ResponseWriter, r *http.Request) {
+	providers, err := handler.GetProviders(user, r)
+	if err != nil {
+		log.Printf("Unable to get content providers")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	posts := ranking.GetPosts(providers, 20)
