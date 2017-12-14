@@ -12,5 +12,6 @@ CREATE TABLE `UserInfo` (
 	`RedditWeight` INTEGER,
 	`FacebookWeight` INTEGER,
 	`HackerNewsWeight` INTEGER,
-	`GoogleNewsWeight` INTEGER
+	`GoogleNewsWeight` INTEGER,
+	`TwitterWeight` INTEGER
 );

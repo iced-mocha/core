@@ -46,14 +46,14 @@ func (d *driver) InsertUser(user models.User) error {
 	log.Printf("Inserting user with ID: %v, and username: %v", user.ID, user.Username)
 
 	stmt, err := d.db.Prepare("INSERT INTO UserInfo(UserID, Username, Password" +
-		", RedditWeight, FacebookWeight, HackerNewsWeight, GoogleNewsWeight) values(?,?,?,?,?,?,?)")
+		", RedditWeight, FacebookWeight, HackerNewsWeight, GoogleNewsWeight, TwitterWeight) values(?,?,?,?,?,?,?,?)")
 	if err != nil {
 		log.Printf("Unable to prepare statement for inserting user: %v", err)
 		return err
 	}
 
 	_, err = stmt.Exec(user.ID, user.Username, user.Password, user.PostWeights.Reddit,
-		user.PostWeights.Facebook, user.PostWeights.HackerNews, user.PostWeights.GoogleNews)
+		user.PostWeights.Facebook, user.PostWeights.HackerNews, user.PostWeights.GoogleNews, user.PostWeights.Twitter)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -155,7 +155,7 @@ func (d *driver) GetUser(username string) (models.User, bool, error) {
 	var twitterUsername, twitterAuthToken, twitterSecret, redditUsername, redditAuthToken, facebookUsername, facebookAuthToken NullString
 	weights := models.Weights{}
 	err = rows.Scan(&user.ID, &user.Username, &user.Password, &twitterUsername, &twitterAuthToken, &twitterSecret, &redditUsername, &redditAuthToken,
-		&facebookUsername, &facebookAuthToken, &weights.Reddit, &weights.Facebook, &weights.HackerNews, &weights.GoogleNews)
+		&facebookUsername, &facebookAuthToken, &weights.Reddit, &weights.Facebook, &weights.HackerNews, &weights.GoogleNews, &weights.Twitter)
 	if err != nil {
 		log.Printf("Unable to get users: %v", err)
 		return user, false, err
@@ -202,14 +202,15 @@ func (d *driver) UsernameExists(username string) (bool, error) {
 }
 
 func (d *driver) UpdateWeights(username string, weights models.Weights) bool {
-	query := "UPDATE UserInfo SET RedditWeight=?, FacebookWeight=?, HackerNewsWeight=?, GoogleNewsWeight=? WHERE Username=?"
+	log.Printf("Preparing to insert weights into db for user: %v", username)
+	query := "UPDATE UserInfo SET RedditWeight=?, FacebookWeight=?, HackerNewsWeight=?, GoogleNewsWeight=?, TwitterWeight=? WHERE Username=?"
 	stmt, err := d.db.Prepare(query)
 	if err != nil {
 		log.Printf("Unable to prepare query to update reddit weights: %v", err)
 		return false
 	}
 
-	res, err := stmt.Exec(weights.Reddit, weights.Facebook, weights.HackerNews, weights.GoogleNews, username)
+	res, err := stmt.Exec(weights.Reddit, weights.Facebook, weights.HackerNews, weights.GoogleNews, weights.Twitter, username)
 	if err != nil {
 		log.Println(err)
 		return false

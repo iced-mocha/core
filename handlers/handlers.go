@@ -15,8 +15,8 @@ import (
 	"github.com/iced-mocha/core/clients/googlenews"
 	"github.com/iced-mocha/core/clients/hackernews"
 	"github.com/iced-mocha/core/clients/reddit"
-	"github.com/iced-mocha/core/clients/twitter"
 	"github.com/iced-mocha/core/clients/rss"
+	"github.com/iced-mocha/core/clients/twitter"
 	"github.com/iced-mocha/core/config"
 	"github.com/iced-mocha/core/creds"
 	"github.com/iced-mocha/core/ranking"
@@ -99,6 +99,7 @@ func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cac
 
 // POST /v1/weights
 func (h *CoreHandler) UpdateWeights(w http.ResponseWriter, r *http.Request) {
+	log.Printf("received request at POST /v1/weights")
 	s, err := h.SessionManager.GetSession(r)
 	if err != nil {
 		log.Printf("Could not get retrieve session for user: %v", err)
@@ -114,6 +115,7 @@ func (h *CoreHandler) UpdateWeights(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	log.Printf("Preparing to update weights for user: %v", username)
 
 	// Now get the user for the username
 	u, exists, err := h.Driver.GetUser(username)
@@ -132,6 +134,7 @@ func (h *CoreHandler) UpdateWeights(w http.ResponseWriter, r *http.Request) {
 	weights := &models.Weights{}
 	err = json.Unmarshal(contents, weights)
 	if err != nil {
+		log.Printf("Unable to marshal weights object: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -496,6 +499,7 @@ func writePosts(w http.ResponseWriter, posts []models.Post) {
 }
 
 func getDefaultWeight(clientName string) float64 {
+	log.Printf("Getting weight for client: %v", clientName)
 	var val int
 
 	if clientName == "reddit" {
@@ -517,8 +521,10 @@ func getDefaultWeight(clientName string) float64 {
 
 func getWeight(clientName string, user *models.User) float64 {
 	if user == nil {
+		log.Printf("user is nil for some reason...")
 		return getDefaultWeight(clientName)
 	}
+	log.Printf("Getting weight for client: %v", clientName)
 
 	var val float64
 
@@ -553,11 +559,11 @@ func (handler *CoreHandler) getContentProviders(user *models.User) []*ranking.Co
 		}
 
 		numContentProviders++
-		go func(ch chan *ranking.ContentProvider) {
+		go func(name string, ch chan *ranking.ContentProvider) {
 			// Sometimes user is nil when we are not authenticated
-			tw := getWeight(c.Name(), user)
+			tw := getWeight(name, user)
 			ch <- ranking.NewContentProvider(tw, generator)
-		}(ch)
+		}(c.Name(), ch)
 	}
 
 	for i := 0; i < numContentProviders; i++ {

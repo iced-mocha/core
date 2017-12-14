@@ -103,7 +103,7 @@ func (t *Twitter) getPosts(url, token, secret string) clients.PostResponse {
 	}
 	posts = clientResp.Posts
 
-	log.Println("Successfully retrieved %v posts from twitter", len(posts))
+	log.Printf("Successfully retrieved %v posts from twitter", len(posts))
 	// Note here I am treating the `nextURL` really as a URI
 	return clients.PostResponse{posts, fmt.Sprintf("https://%v:%v%v", t.Host, t.Port, clientResp.NextURL), nil}
 }
