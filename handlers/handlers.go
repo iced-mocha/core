@@ -499,7 +499,6 @@ func writePosts(w http.ResponseWriter, posts []models.Post) {
 }
 
 func getDefaultWeight(clientName string) float64 {
-	log.Printf("Getting weight for client: %v", clientName)
 	var val int
 
 	if clientName == "reddit" {
@@ -521,10 +520,8 @@ func getDefaultWeight(clientName string) float64 {
 
 func getWeight(clientName string, user *models.User) float64 {
 	if user == nil {
-		log.Printf("user is nil for some reason...")
 		return getDefaultWeight(clientName)
 	}
-	log.Printf("Getting weight for client: %v", clientName)
 
 	var val float64
 
