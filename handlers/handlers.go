@@ -16,6 +16,7 @@ import (
 	"github.com/iced-mocha/core/clients/hackernews"
 	"github.com/iced-mocha/core/clients/reddit"
 	"github.com/iced-mocha/core/clients/twitter"
+	"github.com/iced-mocha/core/clients/rss"
 	"github.com/iced-mocha/core/config"
 	"github.com/iced-mocha/core/creds"
 	"github.com/iced-mocha/core/ranking"
@@ -74,22 +75,23 @@ func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cac
 	// TODO Find a better way to do this
 	// Maybe create a GetStringKeys function that returns array of values and a potential error
 
-	hosts, err := handler.Config.GetStrings([]string{"hacker-news.host", "facebook.host", "reddit.host", "google-news.host", "twitter.host"})
+	hosts, err := handler.Config.GetStrings([]string{"hacker-news.host", "facebook.host", "reddit.host", "google-news.host", "twitter.host", "rss.host"})
 	if err != nil {
 		return nil, err
 	}
 
-	ports, err := handler.Config.GetInts([]string{"hacker-news.port", "facebook.port", "reddit.port", "google-news.port", "twitter.port"})
+	ports, err := handler.Config.GetInts([]string{"hacker-news.port", "facebook.port", "reddit.port", "google-news.port", "twitter.port", "rss.port"})
 	if err != nil {
 		return nil, err
 	}
 
-	handler.Clients = make([]clients.Client, 5)
+	handler.Clients = make([]clients.Client, 6)
 	handler.Clients[0] = hackernews.New(hosts[0], ports[0])
 	handler.Clients[1] = facebook.New(hosts[1], ports[1])
 	handler.Clients[2] = reddit.New(hosts[2], ports[2])
 	handler.Clients[3] = googlenews.New(hosts[3], ports[3])
 	handler.Clients[4] = twitter.New(hosts[4], ports[4])
+	handler.Clients[5] = rss.New(hosts[5], ports[5])
 
 	return handler, nil
 }

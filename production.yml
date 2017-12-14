@@ -75,3 +75,13 @@ services:
         condition: on-failure
     logging:
       driver: json-file
+  rss-client:
+    image: icedmocha/rss-client
+    ports:
+    - "9000:9000"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    logging:
+      driver: json-file

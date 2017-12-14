@@ -13,3 +13,6 @@ hacker-news:
 google-news:
   host: "google-news-client"
   port: 7000
+rss:
+  host: "rss-client"
+  port: 9000

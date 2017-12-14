@@ -37,3 +37,7 @@ services:
     - "7000:7000"
     env_file:
     - ../google-news-client/workspace.env
+  rss-client:
+    build: ../rss-client
+    ports:
+    - "9000:9000"
