@@ -33,6 +33,7 @@ const (
 	DefaultFacebookWeight   = 10.0
 	DefaultHackerNewsWeight = 20.0
 	DefaultGoogleNewsWeight = 40.0
+	DefaultRssWeight        = 5.0
 )
 
 type CoreHandler struct {
@@ -507,6 +508,8 @@ func getDefaultWeight(clientName string) float64 {
 		val = DefaultGoogleNewsWeight
 	} else if clientName == "twitter" {
 		val = DefaultTwitterWeight
+	} else if clientName == "rss" {
+		val = DefaultRssWeight
 	}
 
 	return float64(val)
