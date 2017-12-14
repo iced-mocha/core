@@ -24,7 +24,7 @@ func getNextProviderIndex(providers []*ContentProvider) int {
 	topRank := -1.0
 
 	for i, p := range providers {
-		if p.CurPost == nil {
+		if p.CurPost == nil || p.Weight == 0 {
 			continue
 		}
 
