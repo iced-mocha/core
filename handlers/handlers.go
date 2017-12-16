@@ -32,8 +32,8 @@ const (
 	DefaultTwitterWeight    = 20.0
 	DefaultFacebookWeight   = 10.0
 	DefaultHackerNewsWeight = 20.0
-	DefaultGoogleNewsWeight = 40.0
-	DefaultRssWeight        = 5.0
+	DefaultGoogleNewsWeight = 30.0
+	DefaultRssWeight        = 15.0
 )
 
 type CoreHandler struct {
