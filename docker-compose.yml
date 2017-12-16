@@ -31,6 +31,14 @@ services:
      - /usr/local/etc/ssl/certs/core.crt:/usr/local/etc/ssl/certs/core.crt
      - /usr/local/etc/ssl/certs/reddit.crt:/usr/local/etc/ssl/certs/reddit.crt
      - /usr/local/etc/ssl/private/reddit.key:/usr/local/etc/ssl/private/reddit.key
+  twitter-client:
+    build: ../twitter-client
+    ports:
+    - "3002:3002"
+    volumes:
+     - /usr/local/etc/ssl/certs/core.crt:/usr/local/etc/ssl/certs/core.crt
+     - /usr/local/etc/ssl/certs/twitter.crt:/usr/local/etc/ssl/certs/twitter.crt
+     - /usr/local/etc/ssl/private/twitter.key:/usr/local/etc/ssl/private/twitter.key
   google-news-client:
     build: ../google-news-client
     ports:

@@ -7,6 +7,9 @@ reddit:
   external-host: "https://localhost:443"
   host: "reddit-client"
   port: 3001
+twitter:
+  host: "twitter-client"
+  port: 3002
 hacker-news:
   host: "hacker-news-client"
   port: 4000
