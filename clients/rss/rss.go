@@ -11,11 +11,6 @@ import (
 	"github.com/iced-mocha/shared/models"
 )
 
-var defaultFeeds = []string{
-	"http://feeds.bbci.co.uk/news/rss.xml",
-	"http://www.cbc.ca/cmlink/rss-topstories",
-}
-
 type RSS struct {
 	Host   string
 	Port   int
@@ -26,12 +21,18 @@ func New(host string, port int) *RSS {
 	return &RSS{Host: host, Port: port}
 }
 
-func (r *RSS) GetPageGenerator(user *models.User) (func() []models.Post, error) {
+func (r *RSS) GetPageGenerator(feeds []string) (func() []models.Post, error) {
+	if len(feeds) == 0 {
+		return func() []models.Post {
+			return nil
+		}, nil
+	}
+
 	nextURL := fmt.Sprintf(
 		"http://%v:%v/v1/posts?count=20&feeds=%v",
 		r.Host,
 		r.Port,
-		strings.Join(defaultFeeds, ","))
+		strings.Join(feeds, ","))
 	getNextPage := func() []models.Post {
 		if nextURL == "" {
 			return []models.Post{}

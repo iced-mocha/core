@@ -3,6 +3,7 @@ package sql
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"log"
 	"reflect"
 
@@ -44,16 +45,43 @@ func (ns *NullString) Scan(value interface{}) error {
 // NOTE: This assumes the password of the user object has already been hashed
 func (d *driver) InsertUser(user models.User) error {
 	log.Printf("Inserting user with ID: %v, and username: %v", user.ID, user.Username)
-
-	stmt, err := d.db.Prepare("INSERT INTO UserInfo(UserID, Username, Password" +
-		", RedditWeight, FacebookWeight, HackerNewsWeight, GoogleNewsWeight, TwitterWeight) values(?,?,?,?,?,?,?,?)")
+	var err error
+	tx, err := d.db.Begin()
 	if err != nil {
-		log.Printf("Unable to prepare statement for inserting user: %v", err)
+		return err
+	}
+	defer func() {
+		if err == nil {
+			tx.Commit()
+		} else {
+			tx.Rollback()
+		}
+	}()
+
+	pw := user.PostWeights
+	_, err = tx.Exec(`
+		INSERT INTO UserInfo (
+			UserID, Username, Password,
+			RedditWeight, FacebookWeight, HackerNewsWeight, GoogleNewsWeight, TwitterWeight
+		)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		user.ID, user.Username, user.Password,
+		pw.Reddit, pw.Facebook, pw.HackerNews, pw.GoogleNews, pw.Twitter)
+	if err != nil {
+		log.Println(err)
 		return err
 	}
 
-	_, err = stmt.Exec(user.ID, user.Username, user.Password, user.PostWeights.Reddit,
-		user.PostWeights.Facebook, user.PostWeights.HackerNews, user.PostWeights.GoogleNews, user.PostWeights.Twitter)
+	values := []string{}
+	args := make([]interface{}, 0)
+	for name, group := range user.RssGroups {
+		values = append(values, "(?,?,?,?)")
+		args = append(args, user.ID, strings.Join(group, ","), user.PostWeights.RSS[name], name)
+	}
+
+	_, err = tx.Exec(`
+		INSERT INTO rss (UserID, Feeds, Weight, Name)
+		VALUES `+strings.Join(values, ","), args...)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -127,16 +155,22 @@ func (d *driver) GetTwitterSecrets(username string) (string, string, error) {
 // Returns the user (if any), whether or not that user exists (bool) and a potential error
 func (d *driver) GetUser(username string) (models.User, bool, error) {
 	log.Printf("Attempting to retrieve user with username %v from db", username)
-	var user models.User = models.User{}
-
-	// This query will have a result set of 0 or 1.. 1 means Username already exists
-	stmt, err := d.db.Prepare("SELECT * FROM UserInfo WHERE Username=?")
-	if err != nil {
-		log.Printf("Error preparing statement: %v", err)
-		return user, false, err
+	var user models.User = models.User{
+		Username: username,
+		RssGroups: make(map[string][]string),
+		PostWeights: models.Weights{
+			RSS: make(map[string]float64),
+		},
 	}
 
-	rows, err := stmt.Query(username)
+	rows, err := d.db.Query(`
+		SELECT UserInfo.UserID, Password,
+			RedditWeight, FacebookWeight, HackerNewsWeight, GoogleNewsWeight, TwitterWeight,
+			Rss.Feeds, Rss.Weight, Rss.Name
+		FROM UserInfo
+		LEFT JOIN Rss ON UserInfo.UserID=Rss.UserID
+		WHERE UserInfo.Username=?
+	`, username)
 	if err != nil {
 		log.Printf("Error completing query: %v", err)
 		return user, false, err
@@ -144,35 +178,36 @@ func (d *driver) GetUser(username string) (models.User, bool, error) {
 	// This is need to prevent database locking
 	defer rows.Close()
 
-	// If there is no rows.Next() Username does not exist
-	if !rows.Next() {
+	var foundUser bool
+	for rows.Next() {
+		foundUser = true
+		var rssFeeds sql.NullString
+		var rssWeight sql.NullFloat64
+		var rssName sql.NullString
+		rows.Scan(
+			&user.ID,
+			&user.Password,
+			&user.PostWeights.Reddit,
+			&user.PostWeights.Facebook,
+			&user.PostWeights.HackerNews,
+			&user.PostWeights.GoogleNews,
+			&user.PostWeights.Twitter,
+			&rssFeeds, &rssWeight, &rssName,
+		)
+
+		if rssName.Valid {
+			name := rssName.String
+			user.RssGroups[name] = strings.Split(rssFeeds.String, ",")
+			user.PostWeights.RSS[name] = rssWeight.Float64
+		}
+	}
+
+	if !foundUser {
 		log.Printf("User %v not found in db", username)
 		return user, false, nil
 	}
 
-	// Scan the select Row into our user struct
-	// NOTE: It is import that this is kept up to date with database schema
-	var twitterUsername, twitterAuthToken, twitterSecret, redditUsername, redditAuthToken, facebookUsername, facebookAuthToken NullString
-	weights := models.Weights{}
-	err = rows.Scan(&user.ID, &user.Username, &user.Password, &twitterUsername, &twitterAuthToken, &twitterSecret, &redditUsername, &redditAuthToken,
-		&facebookUsername, &facebookAuthToken, &weights.Reddit, &weights.Facebook, &weights.HackerNews, &weights.GoogleNews, &weights.Twitter)
-	if err != nil {
-		log.Printf("Unable to get users: %v", err)
-		return user, false, err
-	}
-
-	user.TwitterUsername = twitterUsername.String
-	user.TwitterAuthToken = twitterAuthToken.String
-	user.TwitterSecret = twitterSecret.String
-	user.RedditUsername = redditUsername.String
-	user.RedditAuthToken = redditAuthToken.String
-	user.FacebookUsername = facebookUsername.String
-	user.FacebookAuthToken = facebookAuthToken.String
-	user.PostWeights = weights
-
-	// Otherwise the username does exist
 	return user, true, nil
-
 }
 
 // This function consumes a user name and sees if it already exists in the database

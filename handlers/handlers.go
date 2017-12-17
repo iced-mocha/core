@@ -32,9 +32,24 @@ const (
 	DefaultTwitterWeight    = 20.0
 	DefaultFacebookWeight   = 10.0
 	DefaultHackerNewsWeight = 20.0
-	DefaultGoogleNewsWeight = 30.0
-	DefaultRssWeight        = 15.0
+	DefaultGoogleNewsWeight = 20.0
 )
+
+var DefaultRssWeights = map[string]float64{
+	"news":   13.0,
+	"sports": 10.0,
+}
+
+var DefaultRssGroups = map[string][]string{
+	"news": []string{
+		"http://feeds.bbci.co.uk/news/rss.xml",
+		"http://www.cbc.ca/cmlink/rss-topstories",
+	},
+	"sports": []string{
+		"http://www.espn.com/espn/rss/news",
+		"https://api.foxsports.com/v1/rss",
+	},
+}
 
 type CoreHandler struct {
 	Driver         storage.Driver
@@ -45,7 +60,8 @@ type CoreHandler struct {
 	Cache              *cache.Cache
 	getNextPagingToken func() string
 
-	Clients []clients.Client
+	Clients   []clients.Client
+	RssClient *rss.RSS
 }
 
 // Structure received when updating provider auth info
@@ -86,13 +102,13 @@ func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cac
 		return nil, err
 	}
 
-	handler.Clients = make([]clients.Client, 6)
+	handler.Clients = make([]clients.Client, 5)
 	handler.Clients[0] = hackernews.New(hosts[0], ports[0])
 	handler.Clients[1] = facebook.New(hosts[1], ports[1])
 	handler.Clients[2] = reddit.New(hosts[2], ports[2])
 	handler.Clients[3] = googlenews.New(hosts[3], ports[3])
 	handler.Clients[4] = twitter.New(hosts[4], ports[4])
-	handler.Clients[5] = rss.New(hosts[5], ports[5])
+	handler.RssClient = rss.New(hosts[5], ports[5])
 
 	return handler, nil
 }
@@ -481,7 +497,9 @@ func (handler *CoreHandler) InsertUser(w http.ResponseWriter, r *http.Request) {
 	pw.HackerNews = DefaultHackerNewsWeight
 	pw.GoogleNews = DefaultGoogleNewsWeight
 	pw.Twitter = DefaultTwitterWeight
+	pw.RSS = DefaultRssWeights
 	user.PostWeights = pw
+	user.RssGroups = DefaultRssGroups
 
 	handler.Driver.InsertUser(*user)
 	w.WriteHeader(http.StatusOK)
@@ -511,8 +529,6 @@ func getDefaultWeight(clientName string) float64 {
 		val = DefaultGoogleNewsWeight
 	} else if clientName == "twitter" {
 		val = DefaultTwitterWeight
-	} else if clientName == "rss" {
-		val = DefaultRssWeight
 	}
 
 	return float64(val)
@@ -561,6 +577,26 @@ func (handler *CoreHandler) getContentProviders(user *models.User) []*ranking.Co
 			tw := getWeight(name, user)
 			ch <- ranking.NewContentProvider(tw, generator)
 		}(c.Name(), ch)
+	}
+
+	rssGroups := DefaultRssGroups
+	rssWeights := DefaultRssWeights
+	if user != nil {
+		rssGroups = user.RssGroups
+		rssWeights = user.PostWeights.RSS
+	}
+
+	for name, group := range rssGroups {
+		generator, err := handler.RssClient.GetPageGenerator(group)
+		if err != nil {
+			log.Printf("error getting page generator for rss group %v: %v", name, err)
+			continue
+		}
+
+		numContentProviders++
+		go func(name string, ch chan *ranking.ContentProvider) {
+			ch <- ranking.NewContentProvider(rssWeights[name], generator)
+		}(name, ch)
 	}
 
 	for i := 0; i < numContentProviders; i++ {
