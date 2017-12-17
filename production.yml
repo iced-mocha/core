@@ -25,6 +25,7 @@ services:
         condition: on-failure
     volumes:
      - /home/docker/ssl/certs/reddit.crt:/usr/local/etc/ssl/certs/reddit.crt
+     - /home/docker/ssl/certs/twitter.crt:/usr/local/etc/ssl/certs/twitter.crt
      - /home/docker/ssl/certs/core.crt:/usr/local/etc/ssl/certs/core.crt
      - /home/docker/ssl/private/core.key:/usr/local/etc/ssl/private/core.key
     logging:
@@ -61,6 +62,20 @@ services:
      - /home/docker/ssl/certs/core.crt:/usr/local/etc/ssl/certs/core.crt
      - /home/docker/ssl/certs/reddit.crt:/usr/local/etc/ssl/certs/reddit.crt
      - /home/docker/ssl/private/reddit.key:/usr/local/etc/ssl/private/reddit.key
+    logging:
+      driver: json-file
+  twitter-client:
+    image: icedmocha/twitter-client
+    ports:
+    - "3002:3002"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    volumes:
+     - /home/docker/ssl/certs/core.crt:/usr/local/etc/ssl/certs/core.crt
+     - /home/docker/ssl/certs/twitter.crt:/usr/local/etc/ssl/certs/twitter.crt
+     - /home/docker/ssl/private/twitter.key:/usr/local/etc/ssl/private/twitter.key
     logging:
       driver: json-file
   google-news-client:
