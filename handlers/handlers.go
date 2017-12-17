@@ -161,34 +161,29 @@ func (h *CoreHandler) UpdateWeights(w http.ResponseWriter, r *http.Request) {
 }
 
 // Deletes the type of linked account for authenticated user in the request
-// DELETE /v1/users/accounts/{type}
+// DELETE /v1/users/{userID}/accounts/{type}
+// type must be one of {reddit, facebook, twitter}
 func (h *CoreHandler) DeleteLinkedAccount(w http.ResponseWriter, r *http.Request) {
-	s, err := h.SessionManager.GetSession(r)
-	if err != nil {
-		log.Printf("Could not get retrieve session for user: %v", err)
-		// Return unauthorized error -- but TODO: in the future differentiate between 401 and 500
-		w.WriteHeader(http.StatusUnauthorized)
-		return
+	vars := mux.Vars(r)
+	userID := vars["userID"]
+	t := vars["type"]
+
+	hasAuth, code := h.hasAuthorization(userID, r)
+	if !hasAuth {
+		// Note the message sent here will be user facing
+		http.Error(w, "unable to unlink "+t+" account", code)
 	}
 
-	// Get user associate with the session
-	ui := s.Get("username")
-	username, ok := ui.(string)
-	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	// Parse the type of account to remove
-	t := mux.Vars(r)["type"]
-
+	// Overwriting all values with "" is essentially deleting
 	if t == "reddit" {
-		// Overwriting all values with "" is essentially deleting
-		h.Driver.UpdateRedditAccount(username, "", "", "")
+		h.Driver.UpdateRedditAccount(userID, "", "", "")
 	} else if t == "facebook" {
-		h.Driver.UpdateFacebookAccount(username, "", "")
+		h.Driver.UpdateFacebookAccount(userID, "", "")
 	} else if t == "twitter" {
-		h.Driver.UpdateTwitterAccount(username, "", "", "")
+		h.Driver.UpdateTwitterAccount(userID, "", "", "")
+	} else {
+		http.Error(w, "received unrecognized account type "+t, http.StatusBadRequest)
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)

@@ -41,6 +41,7 @@ func (suite *HandlersTestSuite) SetupSuite() {
 	suite.router = mux.NewRouter()
 	suite.router.HandleFunc("/v1/users/{userID}/authorize/reddit", suite.handler.UpdateRedditAuth).Methods(http.MethodPost)
 	suite.router.HandleFunc("/v1/users/{userID}/weights", suite.handler.UpdateWeights).Methods(http.MethodPost)
+	suite.router.HandleFunc("/v1/users/{userID}/accounts/{type}", suite.handler.DeleteLinkedAccount).Methods(http.MethodDelete)
 	suite.router.HandleFunc("/v1/users", suite.handler.InsertUser).Methods(http.MethodPost)
 }
 
@@ -154,6 +155,48 @@ func (suite *HandlersTestSuite) TestUpdateRedditAuth() {
 	w = httptest.NewRecorder()
 	suite.router.ServeHTTP(w, r)
 	suite.Equal(http.StatusBadRequest, w.Code)
+}
+
+func (suite *HandlersTestSuite) TestDeleteLinkedAccount() {
+	// Make sure we can get a 200 when sending valid request
+	r, err := http.NewRequest(http.MethodDelete, "/v1/users/userID/accounts/reddit", nil)
+	suite.Nil(err)
+	addValidSession(r)
+	w := httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusOK, w.Code)
+
+	// Make sure we can get a 401 when sending request without a cookie
+	r, err = http.NewRequest(http.MethodDelete, "/v1/users/userID/accounts/reddit", nil)
+	suite.Nil(err)
+	w = httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusUnauthorized, w.Code)
+
+	// Make sure we can get a 401 when sending request with an invalid session
+	r, err = http.NewRequest(http.MethodDelete, "/v1/users/userID/accounts/reddit", nil)
+	suite.Nil(err)
+	addInvalidSession(r)
+	w = httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusUnauthorized, w.Code)
+
+	// Make sure we can get a 403 when sending request with a session for another user
+	r, err = http.NewRequest(http.MethodDelete, "/v1/users/user/accounts/reddit", nil)
+	suite.Nil(err)
+	addValidSession(r)
+	w = httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusForbidden, w.Code)
+
+	// Make sure we can get a 400 when sending request with a unrecognized account type
+	r, err = http.NewRequest(http.MethodDelete, "/v1/users/userID/accounts/fake", nil)
+	suite.Nil(err)
+	addValidSession(r)
+	w = httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusBadRequest, w.Code)
+
 }
 
 func (suite *HandlersTestSuite) TestUpdateWeights() {

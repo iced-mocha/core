@@ -24,7 +24,7 @@ func New(api handlers.CoreAPI) (*Server, error) {
 	s.Router.HandleFunc("/v1/logout", api.Logout).Methods("POST")
 	s.Router.HandleFunc("/v1/loggedin", api.IsLoggedIn).Methods("GET")
 
-	s.Router.HandleFunc("/v1/users/accounts/{type}", api.DeleteLinkedAccount).Methods("DELETE")
+	s.Router.HandleFunc("/v1/users/{userID}/accounts/{type}", api.DeleteLinkedAccount).Methods("DELETE")
 
 	s.Router.HandleFunc("/v1/users/{userID}/authorize/twitter", api.TwitterAuth).Methods("GET")
 	s.Router.HandleFunc("/v1/users/{userID}/authorize/twitter", api.UpdateTwitterAuth).Methods("POST")
