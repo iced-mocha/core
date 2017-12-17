@@ -3,9 +3,9 @@ package sql
 import (
 	"database/sql"
 	"errors"
-	"strings"
 	"log"
 	"reflect"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/iced-mocha/shared/models"
@@ -156,7 +156,7 @@ func (d *driver) GetTwitterSecrets(username string) (string, string, error) {
 func (d *driver) GetUser(username string) (models.User, bool, error) {
 	log.Printf("Attempting to retrieve user with username %v from db", username)
 	var user models.User = models.User{
-		Username: username,
+		Username:  username,
 		RssGroups: make(map[string][]string),
 		PostWeights: models.Weights{
 			RSS: make(map[string]float64),
@@ -186,7 +186,16 @@ func (d *driver) GetUser(username string) (models.User, bool, error) {
 		var rssName sql.NullString
 		rows.Scan(
 			&user.ID,
+			&user.Username,
 			&user.Password,
+			&user.TwitterUsername,
+			&user.TwitterAuthToken,
+			&user.TwitterSecret,
+			&user.RedditUsername,
+			&user.RedditAuthToken,
+			&user.RedditRefreshToken,
+			&user.FacebookUsername,
+			&user.FacebookAuthToken,
 			&user.PostWeights.Reddit,
 			&user.PostWeights.Facebook,
 			&user.PostWeights.HackerNews,
@@ -262,8 +271,8 @@ func (d *driver) UpdateWeights(username string, weights models.Weights) bool {
 }
 
 // Updates information about a reddit account for a given userID
-func (d *driver) UpdateRedditAccount(username, redditUser, authToken string) bool {
-	query := "UPDATE UserInfo SET RedditUserName=?, RedditAuthToken=? where Username=?"
+func (d *driver) UpdateRedditAccount(username, redditUser, authToken, refreshToken string) bool {
+	query := "UPDATE UserInfo SET RedditUserName=?, RedditAuthToken=?, RedditRefreshToken=? where Username=?"
 
 	stmt, err := d.db.Prepare(query)
 	if err != nil {
@@ -271,7 +280,7 @@ func (d *driver) UpdateRedditAccount(username, redditUser, authToken string) boo
 		return false
 	}
 
-	res, err := stmt.Exec(redditUser, authToken, username)
+	res, err := stmt.Exec(redditUser, authToken, refreshToken, username)
 	if err != nil {
 		log.Println(err)
 		return false

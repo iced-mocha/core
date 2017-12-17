@@ -7,6 +7,7 @@ CREATE TABLE `UserInfo` (
 	`TwitterSecret` VARCHAR(64) NOT NULL DEFAULT "",
 	`RedditUsername` VARCHAR(64) NOT NULL DEFAULT "",
 	`RedditAuthToken` VARCHAR(64) NOT NULL DEFAULT "",
+	`RedditRefreshToken` VARCHAR(64) NULL DEFAULT "",
 	`FacebookUsername` VARCHAR(64) NOT NULL DEFAULT "",
 	`FacebookAuthToken` VARCHAR(64) NOT NULL DEFAULT "",
 	`RedditWeight` FLOAT NOT NULL DEFAULT 0,

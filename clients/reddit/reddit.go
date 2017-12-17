@@ -41,7 +41,7 @@ func New(host string, port int) *Reddit {
 }
 
 func (r *Reddit) GetPageGenerator(user *models.User) (func() []models.Post, error) {
-	var authToken, nextURL string
+	var authToken, refreshToken, nextURL string
 
 	if user == nil || user.RedditUsername == "" {
 		log.Printf("Getting default reddit page generator.")
@@ -49,13 +49,14 @@ func (r *Reddit) GetPageGenerator(user *models.User) (func() []models.Post, erro
 	} else {
 		log.Printf("Getting reddit page generator for user: %v", user.Username)
 		authToken = user.RedditAuthToken
+		refreshToken = user.RedditRefreshToken
 		// TODO: Eventually we will first have to check if the reddit token will expire
 		nextURL = fmt.Sprintf("https://%v:%v/v1/%v/posts", r.Host, r.Port, user.RedditUsername)
 	}
 
 	getNextPage := func() []models.Post {
 		log.Printf("Attemping to get reddit page with url: %v", nextURL)
-		resp := r.getPosts(nextURL, authToken)
+		resp := r.getPosts(nextURL, authToken, refreshToken)
 		if resp.Err != nil {
 			nextURL = ""
 			log.Printf("Error getting reddit page %v", resp.Err)
@@ -77,9 +78,9 @@ func (r *Reddit) Weight() float64 {
 	return r.weight
 }
 
-func (r *Reddit) getPosts(url, redditToken string) clients.PostResponse {
+func (r *Reddit) getPosts(url, redditToken, refreshToken string) clients.PostResponse {
 	posts := []models.Post{}
-	jsonString := []byte(fmt.Sprintf("{ \"bearertoken\": \"%v\"}", redditToken))
+	jsonString := []byte(fmt.Sprintf(`{ "bearer-token": "%v", "refresh-token": "%v"}`, redditToken, refreshToken))
 	req, err := http.NewRequest(http.MethodGet, url, bytes.NewBuffer(jsonString))
 	if err != nil {
 		return clients.PostResponse{posts, "", err}

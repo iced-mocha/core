@@ -192,7 +192,7 @@ func (h *CoreHandler) DeleteLinkedAccount(w http.ResponseWriter, r *http.Request
 
 	if t == "reddit" {
 		// Overwriting all values with "" is essentially deleting
-		h.Driver.UpdateRedditAccount(username, "", "")
+		h.Driver.UpdateRedditAccount(username, "", "", "")
 	} else if t == "facebook" {
 		h.Driver.UpdateFacebookAccount(username, "", "")
 	} else if t == "twitter" {
@@ -298,7 +298,7 @@ func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	successful := handler.Driver.UpdateRedditAccount(id, auth.Username, auth.Token)
+	successful := handler.Driver.UpdateRedditAccount(id, auth.Username, auth.Token, auth.RefreshToken)
 	if !successful {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
