@@ -13,6 +13,7 @@ services:
      - "3000:3000"
     volumes:
      - /usr/local/etc/ssl/certs/reddit.crt:/usr/local/etc/ssl/certs/reddit.crt
+     - /usr/local/etc/ssl/certs/twitter.crt:/usr/local/etc/ssl/certs/twitter.crt
      - /usr/local/etc/ssl/certs/core.crt:/usr/local/etc/ssl/certs/core.crt
      - /usr/local/etc/ssl/private/core.key:/usr/local/etc/ssl/private/core.key
   hacker-news-client:
