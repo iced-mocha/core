@@ -16,6 +16,8 @@ const (
 //		 additionally username must be url safe
 // The following characters are URL safe: ALPHA DIGIT "-" / "." / "_" / "~"
 func ValidateSignupCredentials(username, password string) error {
+	// Note: the error messages in this function are user facing
+
 	if len(username) < minUsernameLength {
 		return fmt.Errorf("Username must be at least %v characters long", minUsernameLength)
 	}

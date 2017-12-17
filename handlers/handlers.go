@@ -54,7 +54,7 @@ var DefaultRssGroups = map[string][]string{
 type CoreHandler struct {
 	Driver         storage.Driver
 	Config         config.Config
-	SessionManager sessions.Manager
+	SessionManager sessions.IManager
 	// TODO: Having a cache on core used for pagination requires us to only run
 	// one instance of core
 	Cache              *cache.Cache
@@ -64,7 +64,7 @@ type CoreHandler struct {
 	RssClient *rss.RSS
 }
 
-// Structure received when updating provider auth info
+// Structure received from one of our clients when updating their auth info
 type ProviderAuth struct {
 	Type         string `json:"type"`
 	Username     string `json:"username"`
@@ -73,7 +73,7 @@ type ProviderAuth struct {
 	Secret       string `json:"secret"`
 }
 
-func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cache) (*CoreHandler, error) {
+func New(d storage.Driver, sm *sessions.Manager, conf config.Config, c *cache.Cache) (*CoreHandler, error) {
 	handler := &CoreHandler{}
 	handler.Driver = d
 	handler.Config = conf
@@ -118,8 +118,8 @@ func (h *CoreHandler) UpdateWeights(w http.ResponseWriter, r *http.Request) {
 	log.Printf("received request at POST /v1/weights")
 	s, err := h.SessionManager.GetSession(r)
 	if err != nil {
-		log.Printf("Could not get retrieve session for user: %v", err)
 		// Return unauthorized error -- but TODO: in the future differentiate between 401 and 500
+		log.Printf("Could not get retrieve session for user: %v", err)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -154,11 +154,10 @@ func (h *CoreHandler) UpdateWeights(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-
-	log.Printf("Received the follow weights for user %v: %+v\n", u.Username, weights)
+	log.Printf("Received the follow weights for user %v: %+v", u.Username, weights)
 
 	if !h.Driver.UpdateWeights(u.Username, *weights) {
-		log.Println(err)
+		// Insert our user with new weights into DB
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -271,37 +270,69 @@ func (handler *CoreHandler) UpdateTwitterAuth(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusOK)
 }
 
-// Updates the reddit oauth token stored for a user with id <userID>
-// POST /v1/user/{userID}/authorize/reddit
+/* Updates the reddit oauth token/refresh stored for a user with id <userID>
+ * POST /v1/user/{userID}/authorize/reddit
+ * Expected body:
+ *	{ "type": "reddit", "username": "%v", "token": "%v", "refresh-token": "%v"}
+ */
 func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Request) {
-	// TODO: We are currently not verifying that the user requesting this is in fact allowed to do so
+	userID := mux.Vars(r)["userID"]
+
+	// First we must verify that the incoming request is allowed to modify this users data
+	s, err := handler.SessionManager.GetSession(r)
+	if err != nil {
+		log.Printf("Could not find session when trying to update reddit auth")
+		http.Error(w, "Could not find valid session for incoming request", http.StatusUnauthorized)
+		return
+	}
+
+	// Get the username associated to the retriever session
+	ui := s.Get("username")
+	if username, ok := ui.(string); !ok {
+		// Error parse the stored username
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	} else if username != userID {
+		// An attempt to update another users RedditAuth info
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
 
 	// Read body of the request
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Error reading body: %v", err)
-		http.Error(w, "can't read body", http.StatusBadRequest)
+		http.Error(w, "unable to read request body", http.StatusBadRequest)
 		return
 	}
 
-	// Get the user id from path paramater
-	id := mux.Vars(r)["userID"]
-
-	// Change the body into a user object
-	auth := &ProviderAuth{}
-	err = json.Unmarshal(body, auth)
-	if err != nil {
-		log.Printf("Error parsing request body when updating reddit auth for user: %v - %v", id, err)
-		http.Error(w, "can't parse body", http.StatusBadRequest)
+	// Change the body into a auth object
+	auth := ProviderAuth{}
+	if err = json.Unmarshal(body, &auth); err != nil {
+		log.Printf("Error parsing request body when updating reddit auth for user: %v - %v", userID, err)
+		http.Error(w, "unable to parse request body", http.StatusBadRequest)
 		return
 	}
 
-	successful := handler.Driver.UpdateRedditAccount(id, auth.Username, auth.Token, auth.RefreshToken)
-	if !successful {
+	// We require the following fields (username, token, refresh-token) to be non-empty
+	if !validRedditAuth(auth) {
+		log.Printf("Received empty field in provided auth body while updating reddit account")
+		http.Error(w, "missing field in reddit auth update - (username, token, refresh-token)"+
+			"must be non-empty", http.StatusBadRequest)
+		return
+	}
+
+	ok := handler.Driver.UpdateRedditAccount(userID, auth.Username, auth.Token, auth.RefreshToken)
+	if !ok {
+		log.Printf("Unable to update reddit account for user %v", userID)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func validRedditAuth(auth ProviderAuth) bool {
+	return auth.Username != "" && auth.Token != "" && auth.RefreshToken != ""
 }
 
 // Redirects to our reddit client to authorize or service to use reddit account
