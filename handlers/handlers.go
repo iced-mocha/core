@@ -113,29 +113,26 @@ func New(d storage.Driver, sm *sessions.Manager, conf config.Config, c *cache.Ca
 	return handler, nil
 }
 
-// POST /v1/weights
+/* POST /v1/{userID}/weights
+ * Expected body:
+ * 	{ "reddit": 4.0, "facebook": 60.4 ... RSS: { "fox": 50.4 } }
+ */
 func (h *CoreHandler) UpdateWeights(w http.ResponseWriter, r *http.Request) {
-	log.Printf("received request at POST /v1/weights")
-	s, err := h.SessionManager.GetSession(r)
-	if err != nil {
-		// Return unauthorized error -- but TODO: in the future differentiate between 401 and 500
-		log.Printf("Could not get retrieve session for user: %v", err)
-		w.WriteHeader(http.StatusUnauthorized)
+	userID := mux.Vars(r)["userID"]
+	log.Printf("Received request to update weights for user: %v", userID)
+
+	hasAuth, code := h.hasAuthorization(userID, r)
+	if !hasAuth {
+		log.Printf("Unable to update weights for user: %v", userID)
+		w.WriteHeader(code)
 		return
 	}
+	log.Printf("Preparing to update weights for user: %v", userID)
 
-	// Get user associate with the session
-	ui := s.Get("username")
-	username, ok := ui.(string)
-	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	log.Printf("Preparing to update weights for user: %v", username)
-
-	// Now get the user for the username
-	u, exists, err := h.Driver.GetUser(username)
+	// Now attempt to get the user for the username
+	u, exists, err := h.Driver.GetUser(userID)
 	if !exists || err != nil {
+		log.Printf("Unable to retireve user from database when trying to update weights")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -148,13 +145,11 @@ func (h *CoreHandler) UpdateWeights(w http.ResponseWriter, r *http.Request) {
 	}
 
 	weights := &models.Weights{}
-	err = json.Unmarshal(contents, weights)
-	if err != nil {
-		log.Printf("Unable to marshal weights object: %v", err)
+	if err := json.Unmarshal(contents, weights); err != nil {
+		log.Printf("Unable to marshal request body into weights object: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	log.Printf("Received the follow weights for user %v: %+v", u.Username, weights)
 
 	if !h.Driver.UpdateWeights(u.Username, *weights) {
 		// Insert our user with new weights into DB
@@ -270,6 +265,33 @@ func (handler *CoreHandler) UpdateTwitterAuth(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusOK)
 }
 
+/* This function is used for determining if a specific user has access to a specific endpoint
+ * based on the cookies attached to the incoming request.
+ * Checks to see if the incoming request r has authorization to modify resources for the given user.
+ * Returns: True/False depending on if they have access
+ *			Appropriate http status code to return if access is denied
+ */
+func (handler *CoreHandler) hasAuthorization(user string, r *http.Request) (bool, int) {
+	// First we must verify that the incoming request is allowed to modify this users data
+	s, err := handler.SessionManager.GetSession(r)
+	if err != nil {
+		log.Printf("Unable to find valid session for incoming request for user %v", user)
+		return false, http.StatusUnauthorized
+	}
+
+	// Get the username associated to the retriever session
+	ui := s.Get("username")
+	if username, ok := ui.(string); !ok {
+		// Error parsing the stored username
+		return false, http.StatusInternalServerError
+	} else if username != user {
+		// An attempt to update another users information
+		return false, http.StatusForbidden
+	}
+
+	return true, http.StatusOK
+}
+
 /* Updates the reddit oauth token/refresh stored for a user with id <userID>
  * POST /v1/user/{userID}/authorize/reddit
  * Expected body:
@@ -277,24 +299,10 @@ func (handler *CoreHandler) UpdateTwitterAuth(w http.ResponseWriter, r *http.Req
  */
 func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Request) {
 	userID := mux.Vars(r)["userID"]
-
-	// First we must verify that the incoming request is allowed to modify this users data
-	s, err := handler.SessionManager.GetSession(r)
-	if err != nil {
-		log.Printf("Could not find session when trying to update reddit auth")
-		http.Error(w, "Could not find valid session for incoming request", http.StatusUnauthorized)
-		return
-	}
-
-	// Get the username associated to the retriever session
-	ui := s.Get("username")
-	if username, ok := ui.(string); !ok {
-		// Error parse the stored username
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if username != userID {
-		// An attempt to update another users RedditAuth info
-		w.WriteHeader(http.StatusForbidden)
+	hasAuth, code := handler.hasAuthorization(userID, r)
+	if !hasAuth {
+		log.Printf("Unable to complete request to updateRedditAuth")
+		http.Error(w, "unable to complete request", code)
 		return
 	}
 

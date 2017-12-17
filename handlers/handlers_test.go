@@ -21,6 +21,7 @@ type HandlersTestSuite struct {
 
 const (
 	validRedditAuthJSON = `{"token": "test", "refresh-token": "test", "type": "reddit", "username": "test"}`
+	validWeightsJSON    = `{"reddit": 40.0}`
 	incompleteAuthJSON  = `{"token": "test", "username": "test"}`
 	validUserJSON       = `{"username": "jack", "password": "password"}`
 	existsJSON          = `{"username": "exists", "password": "password"}`
@@ -38,7 +39,8 @@ func (suite *HandlersTestSuite) SetupSuite() {
 
 	// In order to test using path params we need to run a server and send requests to it
 	suite.router = mux.NewRouter()
-	suite.router.HandleFunc("/v1/user/{userID}/authorize/reddit", suite.handler.UpdateRedditAuth).Methods(http.MethodPost)
+	suite.router.HandleFunc("/v1/users/{userID}/authorize/reddit", suite.handler.UpdateRedditAuth).Methods(http.MethodPost)
+	suite.router.HandleFunc("/v1/users/{userID}/weights", suite.handler.UpdateWeights).Methods(http.MethodPost)
 	suite.router.HandleFunc("/v1/users", suite.handler.InsertUser).Methods(http.MethodPost)
 }
 
@@ -99,7 +101,7 @@ func (suite *HandlersTestSuite) TestInsertUser() {
 
 func (suite *HandlersTestSuite) TestUpdateRedditAuth() {
 	// Make sure we can get a 200 when sending valid request
-	r, err := http.NewRequest(http.MethodPost, "/v1/user/userID/authorize/reddit", bytes.NewBufferString(validRedditAuthJSON))
+	r, err := http.NewRequest(http.MethodPost, "/v1/users/userID/authorize/reddit", bytes.NewBufferString(validRedditAuthJSON))
 	suite.Nil(err)
 	addValidSession(r)
 	w := httptest.NewRecorder()
@@ -107,14 +109,14 @@ func (suite *HandlersTestSuite) TestUpdateRedditAuth() {
 	suite.Equal(http.StatusOK, w.Code)
 
 	// Make sure we can get a 401 when sending valid request but dont have a valid session
-	r, err = http.NewRequest(http.MethodPost, "/v1/user/userID/authorize/reddit", bytes.NewBufferString(validRedditAuthJSON))
+	r, err = http.NewRequest(http.MethodPost, "/v1/users/userID/authorize/reddit", bytes.NewBufferString(validRedditAuthJSON))
 	suite.Nil(err)
 	w = httptest.NewRecorder()
 	suite.router.ServeHTTP(w, r)
 	suite.Equal(http.StatusUnauthorized, w.Code)
 
 	// Make sure we can get a 401 when sending valid request but have an invalid session
-	r, err = http.NewRequest(http.MethodPost, "/v1/user/user/authorize/reddit", bytes.NewBufferString(validRedditAuthJSON))
+	r, err = http.NewRequest(http.MethodPost, "/v1/users/userID/authorize/reddit", bytes.NewBufferString(validRedditAuthJSON))
 	suite.Nil(err)
 	addInvalidSession(r)
 	w = httptest.NewRecorder()
@@ -122,7 +124,7 @@ func (suite *HandlersTestSuite) TestUpdateRedditAuth() {
 	suite.Equal(http.StatusUnauthorized, w.Code)
 
 	// Make sure we can get a 403 when sending valid request but are trying to update another accounts info
-	r, err = http.NewRequest(http.MethodPost, "/v1/user/user/authorize/reddit", bytes.NewBufferString(validRedditAuthJSON))
+	r, err = http.NewRequest(http.MethodPost, "/v1/users/user/authorize/reddit", bytes.NewBufferString(validRedditAuthJSON))
 	suite.Nil(err)
 	addValidSession(r)
 	w = httptest.NewRecorder()
@@ -130,7 +132,7 @@ func (suite *HandlersTestSuite) TestUpdateRedditAuth() {
 	suite.Equal(http.StatusForbidden, w.Code)
 
 	// Make sure sending incomplete set of values results in 400
-	r, err = http.NewRequest(http.MethodPost, "/v1/user/userID/authorize/reddit", bytes.NewBufferString(incompleteAuthJSON))
+	r, err = http.NewRequest(http.MethodPost, "/v1/users/userID/authorize/reddit", bytes.NewBufferString(incompleteAuthJSON))
 	suite.Nil(err)
 	addValidSession(r)
 	w = httptest.NewRecorder()
@@ -138,7 +140,7 @@ func (suite *HandlersTestSuite) TestUpdateRedditAuth() {
 	suite.Equal(http.StatusBadRequest, w.Code)
 
 	// Make sure empty request body results in 400 bad request
-	r, err = http.NewRequest(http.MethodPost, "/v1/user/userID/authorize/reddit", bytes.NewBufferString(""))
+	r, err = http.NewRequest(http.MethodPost, "/v1/users/userID/authorize/reddit", bytes.NewBufferString(""))
 	suite.Nil(err)
 	addValidSession(r)
 	w = httptest.NewRecorder()
@@ -146,13 +148,61 @@ func (suite *HandlersTestSuite) TestUpdateRedditAuth() {
 	suite.Equal(http.StatusBadRequest, w.Code)
 
 	// Make sure non JSON body results in 400 bad request
-	r, err = http.NewRequest(http.MethodPost, "/v1/user/userID/authorize/reddit", bytes.NewBufferString(`"not json"}`))
+	r, err = http.NewRequest(http.MethodPost, "/v1/users/userID/authorize/reddit", bytes.NewBufferString(`"not json"}`))
+	suite.Nil(err)
+	addValidSession(r)
+	w = httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusBadRequest, w.Code)
+}
+
+func (suite *HandlersTestSuite) TestUpdateWeights() {
+	// Make sure we can get a 200 when sending valid request
+	r, err := http.NewRequest(http.MethodPost, "/v1/users/userID/weights", bytes.NewBufferString(validWeightsJSON))
+	suite.Nil(err)
+	addValidSession(r)
+	w := httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusOK, w.Code)
+
+	// Make sure we can get a 401 when sending valid request but dont have any cookie attached to request
+	r, err = http.NewRequest(http.MethodPost, "/v1/users/userID/weights", bytes.NewBufferString(validWeightsJSON))
+	suite.Nil(err)
+	w = httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusUnauthorized, w.Code)
+
+	// Make sure we can get a 401 when sending valid request but have an invalid session
+	r, err = http.NewRequest(http.MethodPost, "/v1/users/userID/weights", bytes.NewBufferString(validWeightsJSON))
+	suite.Nil(err)
+	addInvalidSession(r)
+	w = httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusUnauthorized, w.Code)
+
+	// Make sure we can get a 403 when sending valid request but are trying to update another accounts info
+	r, err = http.NewRequest(http.MethodPost, "/v1/users/user/weights", bytes.NewBufferString(validWeightsJSON))
+	suite.Nil(err)
+	addValidSession(r)
+	w = httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusForbidden, w.Code)
+
+	// Make sure empty request body results in 400 bad request
+	r, err = http.NewRequest(http.MethodPost, "/v1/users/userID/weights", bytes.NewBufferString(""))
 	suite.Nil(err)
 	addValidSession(r)
 	w = httptest.NewRecorder()
 	suite.router.ServeHTTP(w, r)
 	suite.Equal(http.StatusBadRequest, w.Code)
 
+	// Make sure non JSON body results in 400 bad request
+	r, err = http.NewRequest(http.MethodPost, "/v1/users/userID/weights", bytes.NewBufferString(`"not json"}`))
+	suite.Nil(err)
+	addValidSession(r)
+	w = httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusBadRequest, w.Code)
 }
 
 func TestSuite(t *testing.T) {

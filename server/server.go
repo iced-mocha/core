@@ -19,7 +19,7 @@ func New(api handlers.CoreAPI) (*Server, error) {
 
 	// Uses session id in cookie to retrieve user id
 	s.Router.HandleFunc("/v1/users", api.GetUser).Methods("GET")
-	s.Router.HandleFunc("/v1/weights", api.UpdateWeights).Methods("POST")
+	s.Router.HandleFunc("/v1/users/{userID}/weights", api.UpdateWeights).Methods("POST")
 	s.Router.HandleFunc("/v1/login", api.Login).Methods("POST")
 	s.Router.HandleFunc("/v1/logout", api.Logout).Methods("POST")
 	s.Router.HandleFunc("/v1/loggedin", api.IsLoggedIn).Methods("GET")
