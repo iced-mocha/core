@@ -164,7 +164,8 @@ func (d *driver) GetUser(username string) (models.User, bool, error) {
 	}
 
 	rows, err := d.db.Query(`
-		SELECT UserInfo.UserID, Password,
+		SELECT UserInfo.UserID, Username, Password, TwitterUsername, TwitterAuthToken, TwitterSecret,
+			RedditUsername, RedditAuthToken, RedditRefreshToken, FacebookUsername, FacebookAuthToken, 
 			RedditWeight, FacebookWeight, HackerNewsWeight, GoogleNewsWeight, TwitterWeight,
 			Rss.Feeds, Rss.Weight, Rss.Name
 		FROM UserInfo

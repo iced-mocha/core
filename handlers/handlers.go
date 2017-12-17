@@ -393,6 +393,7 @@ func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Otherwise the user exists so lets see if we were provided correct credentials
 	// NOTE: attemptedUser.Password is plaintext and actualUser.Password is bcrypted hash of password
+	log.Printf("actualUser.Password: %v", actualUser.Password)
 	valid := creds.CheckPasswordHash(attemptedUser.Password, actualUser.Password)
 	if !valid {
 		// Not valid so return unauthorized
