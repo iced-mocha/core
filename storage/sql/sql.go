@@ -165,7 +165,7 @@ func (d *driver) GetUser(username string) (models.User, bool, error) {
 
 	rows, err := d.db.Query(`
 		SELECT UserInfo.UserID, Username, Password, TwitterUsername, TwitterAuthToken, TwitterSecret,
-			RedditUsername, RedditAuthToken, RedditRefreshToken, FacebookUsername, FacebookAuthToken, 
+			RedditUsername, RedditAuthToken, RedditRefreshToken, FacebookUsername, FacebookAuthToken,
 			RedditWeight, FacebookWeight, HackerNewsWeight, GoogleNewsWeight, TwitterWeight,
 			Rss.Feeds, Rss.Weight, Rss.Name
 		FROM UserInfo
@@ -248,14 +248,23 @@ func (d *driver) UsernameExists(username string) (bool, error) {
 
 func (d *driver) UpdateWeights(username string, weights models.Weights) bool {
 	log.Printf("Preparing to insert weights into db for user: %v", username)
-	query := "UPDATE UserInfo SET RedditWeight=?, FacebookWeight=?, HackerNewsWeight=?, GoogleNewsWeight=?, TwitterWeight=? WHERE Username=?"
-	stmt, err := d.db.Prepare(query)
+	var err error
+	tx, err := d.db.Begin()
 	if err != nil {
-		log.Printf("Unable to prepare query to update reddit weights: %v", err)
+		log.Println(err)
 		return false
 	}
+	defer func() {
+		if err == nil {
+			tx.Commit()
+		} else {
+			tx.Rollback()
+		}
+	}()
 
-	res, err := stmt.Exec(weights.Reddit, weights.Facebook, weights.HackerNews, weights.GoogleNews, weights.Twitter, username)
+	res, err := tx.Exec(`
+		UPDATE UserInfo SET RedditWeight=?, FacebookWeight=?, HackerNewsWeight=?, GoogleNewsWeight=?, TwitterWeight=? WHERE Username=?
+	`, weights.Reddit, weights.Facebook, weights.HackerNews, weights.GoogleNews, weights.Twitter, username)
 	if err != nil {
 		log.Println(err)
 		return false
@@ -266,9 +275,22 @@ func (d *driver) UpdateWeights(username string, weights models.Weights) bool {
 		log.Println(err)
 		return false
 	}
+	if n == 0 {
+		log.Println("Could not find user %v when updating weights", username)
+		return false
+	}
 
-	// If the number of rows is greater than 0, then we have updated a user
-	return n > 0
+	for name, weight := range weights.RSS {
+		res, err = tx.Exec(`
+			UPDATE Rss SET Weight=? WHERE UserID=? AND Name=?
+		`, weight, username, name)
+		if err != nil {
+			log.Println(err)
+			return false
+		}
+	}
+
+	return true
 }
 
 // Updates information about a reddit account for a given userID
