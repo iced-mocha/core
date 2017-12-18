@@ -58,11 +58,18 @@ func (m *MockManager) GetSession(r *http.Request) (sessions.Session, error) {
 }
 
 func (m *MockManager) HasSession(r *http.Request) bool {
+	_, err := r.Cookie(testCookie)
+	if err != nil {
+		return false
+	}
+
 	return true
 }
 
 func (m *MockManager) SessionStart(w http.ResponseWriter, r *http.Request) sessions.Session {
-	return nil
+	cookie := http.Cookie{Name: testCookie, Value: "sid"}
+	http.SetCookie(w, &cookie)
+	return &MockSession{}
 }
 
 func (m *MockManager) SessionDestroy(w http.ResponseWriter, r *http.Request) {

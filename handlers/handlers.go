@@ -33,6 +33,7 @@ const (
 	DefaultFacebookWeight   = 10.0
 	DefaultHackerNewsWeight = 20.0
 	DefaultGoogleNewsWeight = 20.0
+	InternalErrorMsg        = "Unable to complete request. Please try again later."
 )
 
 var DefaultRssWeights = map[string]float64{
@@ -228,6 +229,7 @@ func (h *CoreHandler) UpdateAccountAuth(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
+// Inserts the provider auth for Reddit if it has the required keys
 func (h *CoreHandler) updateRedditAuth(userID string, auth ProviderAuth) (error, int) {
 	if !validRedditAuth(auth) {
 		msg := fmt.Sprintf("Received empty field in provided auth body while updating reddit account")
@@ -243,6 +245,7 @@ func (h *CoreHandler) updateRedditAuth(userID string, auth ProviderAuth) (error,
 	return nil, http.StatusOK
 }
 
+// Inserts the ProviderAuth object for the given type t
 func (h *CoreHandler) insertAuth(userID, t string, auth ProviderAuth) (err error, code int) {
 	if t == "reddit" {
 		err, code = h.updateRedditAuth(userID, auth)
@@ -288,8 +291,9 @@ func (handler *CoreHandler) hasAuthorization(user string, r *http.Request) (bool
 	return true, http.StatusOK
 }
 
+// Ensures that the ProviderAuth is valid for updating a Reddit account
 func validRedditAuth(auth ProviderAuth) bool {
-	return auth.Username != "" && auth.Token != "" && auth.RefreshToken != ""
+	return auth.Type == "reddit" && auth.Username != "" && auth.Token != "" && auth.RefreshToken != ""
 }
 
 // Redirects to our reddit client to authorize or service to use reddit account
@@ -312,6 +316,8 @@ func (handler *CoreHandler) TwitterAuth(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, "https://"+host+":"+strconv.Itoa(port)+"/v1/"+userID+"/authorize", http.StatusMovedPermanently)
 }
 
+// TODO: Probably isnt safe to have this endpoint as it could allow for an easy brute force attack
+// Will have to move front-end away from using before removing - or moving to something like /v1/users/{userID}/loggedIn
 func (handler *CoreHandler) IsLoggedIn(w http.ResponseWriter, r *http.Request) {
 	// First check to see if the user is already logged in
 	_, err := handler.SessionManager.GetSession(r)
@@ -324,40 +330,46 @@ func (handler *CoreHandler) IsLoggedIn(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{ "logged-in": true }`))
 }
 
+// POST /v1/logout
 func (handler *CoreHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	// On logout all we need to do is destroy our cookies and session data
-	log.Printf("Logging out user")
 	handler.SessionManager.SessionDestroy(w, r)
 	w.WriteHeader(http.StatusOK)
 }
 
 func buildJSONError(message string) string {
-	return `{ "error": "` + message + `" }`
+	return fmt.Sprintf(`{ "error": "%v" }`, message)
 }
 
+/* POST /v1/login
+ * Expected body:
+ *   { "username": "%v", "password": "%v" }
+ * Note: Error messages here are user facing
+ */
 func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("Error reading body: %v", err)
-		http.Error(w, buildJSONError("bad request when attempting to login"), http.StatusBadRequest)
+		http.Error(w, buildJSONError(InternalErrorMsg), http.StatusBadRequest)
 		return
 	}
 
-	// NOTE: We expect a user object but username and password are all that will be non-empty
-	log.Printf("Received the following user to login: %v", string(body))
-
-	// Marshal the body into a user object
 	attemptedUser := &models.User{}
 	if err := json.Unmarshal(body, attemptedUser); err != nil {
-		log.Printf("Error parsing body: %v", err)
-		http.Error(w, buildJSONError("bad request when attempting to login"), http.StatusBadRequest)
+		http.Error(w, buildJSONError(InternalErrorMsg), http.StatusBadRequest)
 		return
 	}
+
+	// If there is no username or password we cannot log a user in
+	if attemptedUser.Username == "" || attemptedUser.Password == "" {
+		http.Error(w, buildJSONError("Username and password both must be non empty when trying to login"), http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Received the following user to login: %v", attemptedUser.Username)
 
 	// First check to see if the user is already logged in
 	if handler.SessionManager.HasSession(r) {
-		log.Printf("User %v attempted to log in, but they are already logged in.", attemptedUser.Username)
-		// Not sure if this should be an error
+		// Already logged in so the request has succeeded
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -365,26 +377,25 @@ func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 	// Get the actual user for the given username
 	actualUser, exists, err := handler.Driver.GetUser(attemptedUser.Username)
 	if err != nil {
-		log.Printf("Unable to retrieve user: %v", err)
-		http.Error(w, buildJSONError("internal server error when attempting to login"), http.StatusInternalServerError)
+		log.Printf("Unable to retrieve user %v from db: %v", attemptedUser.Username, err)
+		http.Error(w, buildJSONError(InternalErrorMsg), http.StatusInternalServerError)
 		return
 	}
 
 	// If the user does not exist return 401 (Unauthorized) for security reasons
 	if !exists {
 		log.Printf("Requested user %v does not exist", attemptedUser.Username)
-		http.Error(w, buildJSONError("incorrect username or password"), http.StatusUnauthorized)
+		http.Error(w, buildJSONError("Incorrect username or password"), http.StatusUnauthorized)
 		return
 	}
 
 	// Otherwise the user exists so lets see if we were provided correct credentials
 	// NOTE: attemptedUser.Password is plaintext and actualUser.Password is bcrypted hash of password
-	log.Printf("actualUser.Password: %v", actualUser.Password)
 	valid := creds.CheckPasswordHash(attemptedUser.Password, actualUser.Password)
 	if !valid {
 		// Not valid so return unauthorized
 		log.Printf("Bad credentials attempting to authenticate user %v", attemptedUser.Username)
-		http.Error(w, buildJSONError("incorrect username or password"), http.StatusUnauthorized)
+		http.Error(w, buildJSONError("Incorrect username or password"), http.StatusUnauthorized)
 		return
 	}
 

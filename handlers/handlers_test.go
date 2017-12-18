@@ -21,6 +21,8 @@ type HandlersTestSuite struct {
 
 const (
 	validRedditAuthJSON = `{"token": "test", "refresh-token": "test", "type": "reddit", "username": "test"}`
+	validLoginJSON      = `{"username": "userID", "password": "password"}`
+	invalidLoginJSON    = `{"username": "userID", "password": "badpassword"}`
 	validWeightsJSON    = `{"reddit": 40.0}`
 	incompleteAuthJSON  = `{"token": "test", "username": "test"}`
 	validUserJSON       = `{"username": "jack", "password": "password"}`
@@ -43,6 +45,7 @@ func (suite *HandlersTestSuite) SetupSuite() {
 	suite.router.HandleFunc("/v1/users/{userID}/weights", suite.handler.UpdateWeights).Methods(http.MethodPost)
 	suite.router.HandleFunc("/v1/users/{userID}/accounts/{type}", suite.handler.DeleteLinkedAccount).Methods(http.MethodDelete)
 	suite.router.HandleFunc("/v1/users", suite.handler.InsertUser).Methods(http.MethodPost)
+	suite.router.HandleFunc("/v1/login", suite.handler.Login).Methods(http.MethodPost)
 }
 
 func addValidSession(r *http.Request) {
@@ -55,10 +58,41 @@ func addInvalidSession(r *http.Request) {
 	r.AddCookie(&cookie)
 }
 
+func (suite *HandlersTestSuite) TestLogin() {
+	// TODO not sure how to check a cookie has been set
+
+	// Make sure we can get a 200 when sending valid request
+	r, err := http.NewRequest(http.MethodPost, "/v1/login", bytes.NewBufferString(validLoginJSON))
+	suite.Nil(err)
+	w := httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusOK, w.Code)
+
+	// Make sure we can get a 401 when sending bad credentials
+	r, err = http.NewRequest(http.MethodPost, "/v1/login", bytes.NewBufferString(invalidLoginJSON))
+	suite.Nil(err)
+	w = httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusUnauthorized, w.Code)
+
+	// Make sure we can get a 400 when sending empty username
+	r, err = http.NewRequest(http.MethodPost, "/v1/login", bytes.NewBufferString(`{"password": "pass"}`))
+	suite.Nil(err)
+	w = httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusBadRequest, w.Code)
+
+	// Make sure we can get a 400 when sending empty both
+	r, err = http.NewRequest(http.MethodPost, "/v1/login", bytes.NewBufferString(`{}`))
+	suite.Nil(err)
+	w = httptest.NewRecorder()
+	suite.router.ServeHTTP(w, r)
+	suite.Equal(http.StatusBadRequest, w.Code)
+}
+
 func (suite *HandlersTestSuite) TestInsertUser() {
 	// Make sure we can get a 200 when sending valid request
 	r, err := http.NewRequest(http.MethodPost, "/v1/users", bytes.NewBufferString(validUserJSON))
-	// NOTE i think this wwont pparse path params correctly
 	suite.Nil(err)
 	w := httptest.NewRecorder()
 	suite.router.ServeHTTP(w, r)
@@ -98,6 +132,26 @@ func (suite *HandlersTestSuite) TestInsertUser() {
 	w = httptest.NewRecorder()
 	suite.router.ServeHTTP(w, r)
 	suite.Equal(http.StatusBadRequest, w.Code)
+}
+
+func (suite *HandlersTestSuite) TestValidRedditAuth() {
+	// An empty ProviderAuth struct is invalid
+	suite.False(validRedditAuth(ProviderAuth{}))
+
+	// A provider auth for a different type is invalid
+	suite.False(validRedditAuth(ProviderAuth{Type: "notreddit", Token: "s", Username: "user", RefreshToken: "f"}))
+
+	// A provider auth missing auth token is not valid
+	suite.False(validRedditAuth(ProviderAuth{Type: "reddit", Token: "", Username: "user", RefreshToken: "f"}))
+
+	// A provider auth missing refresh token is not valid
+	suite.False(validRedditAuth(ProviderAuth{Type: "reddit", Token: "token", Username: "user", RefreshToken: ""}))
+
+	// A provider auth missing username is not valid
+	suite.False(validRedditAuth(ProviderAuth{Type: "reddit", Token: "token", Username: "", RefreshToken: "f"}))
+
+	// A provider auth with all fields is valid
+	suite.True(validRedditAuth(ProviderAuth{Type: "reddit", Token: "token", Username: "user", RefreshToken: "f"}))
 }
 
 func (suite *HandlersTestSuite) TestUpdateAccountAuth() {
