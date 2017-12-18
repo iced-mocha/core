@@ -76,11 +76,11 @@ func (d *driver) InsertUser(user models.User) error {
 	args := make([]interface{}, 0)
 	for name, group := range user.RssGroups {
 		values = append(values, "(?,?,?,?)")
-		args = append(args, user.ID, strings.Join(group, ","), user.PostWeights.RSS[name], name)
+		args = append(args, user.Username, strings.Join(group, ","), user.PostWeights.RSS[name], name)
 	}
 
 	_, err = tx.Exec(`
-		INSERT INTO rss (UserID, Feeds, Weight, Name)
+		INSERT INTO Rss (Username, Feeds, Weight, Name)
 		VALUES `+strings.Join(values, ","), args...)
 	if err != nil {
 		log.Println(err)
@@ -164,12 +164,12 @@ func (d *driver) GetUser(username string) (models.User, bool, error) {
 	}
 
 	rows, err := d.db.Query(`
-		SELECT UserInfo.UserID, Username, Password, TwitterUsername, TwitterAuthToken, TwitterSecret,
+		SELECT UserID, UserInfo.Username, Password, TwitterUsername, TwitterAuthToken, TwitterSecret,
 			RedditUsername, RedditAuthToken, RedditRefreshToken, FacebookUsername, FacebookAuthToken,
 			RedditWeight, FacebookWeight, HackerNewsWeight, GoogleNewsWeight, TwitterWeight,
 			Rss.Feeds, Rss.Weight, Rss.Name
 		FROM UserInfo
-		LEFT JOIN Rss ON UserInfo.UserID=Rss.UserID
+		LEFT JOIN Rss ON UserInfo.Username=Rss.Username
 		WHERE UserInfo.Username=?
 	`, username)
 	if err != nil {
@@ -282,7 +282,7 @@ func (d *driver) UpdateWeights(username string, weights models.Weights) bool {
 
 	for name, weight := range weights.RSS {
 		res, err = tx.Exec(`
-			UPDATE Rss SET Weight=? WHERE UserID=? AND Name=?
+			UPDATE Rss SET Weight=? WHERE Username=? AND Name=?
 		`, weight, username, name)
 		if err != nil {
 			log.Println(err)

@@ -18,7 +18,7 @@ CREATE TABLE `UserInfo` (
 );
 
 CREATE TABLE `Rss` (
-    `UserID` VARCHAR(64) NOT NULL,
+    `Username` VARCHAR(64) NOT NULL,
     `Feeds` TEXT NOT NULL,
     `Weight` FLOAT NOT NULL,
     `Name` VARCHAR(64) NOT NULL
