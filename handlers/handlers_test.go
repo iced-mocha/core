@@ -39,7 +39,7 @@ func (suite *HandlersTestSuite) SetupSuite() {
 
 	// In order to test using path params we need to run a server and send requests to it
 	suite.router = mux.NewRouter()
-	suite.router.HandleFunc("/v1/users/{userID}/authorize/reddit", suite.handler.UpdateRedditAuth).Methods(http.MethodPost)
+	suite.router.HandleFunc("/v1/users/{userID}/authorize/{type}", suite.handler.UpdateAccountAuth).Methods(http.MethodPost)
 	suite.router.HandleFunc("/v1/users/{userID}/weights", suite.handler.UpdateWeights).Methods(http.MethodPost)
 	suite.router.HandleFunc("/v1/users/{userID}/accounts/{type}", suite.handler.DeleteLinkedAccount).Methods(http.MethodDelete)
 	suite.router.HandleFunc("/v1/users", suite.handler.InsertUser).Methods(http.MethodPost)
@@ -100,7 +100,7 @@ func (suite *HandlersTestSuite) TestInsertUser() {
 	suite.Equal(http.StatusBadRequest, w.Code)
 }
 
-func (suite *HandlersTestSuite) TestUpdateRedditAuth() {
+func (suite *HandlersTestSuite) TestUpdateAccountAuth() {
 	// Make sure we can get a 200 when sending valid request
 	r, err := http.NewRequest(http.MethodPost, "/v1/users/userID/authorize/reddit", bytes.NewBufferString(validRedditAuthJSON))
 	suite.Nil(err)

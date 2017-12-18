@@ -172,6 +172,7 @@ func (h *CoreHandler) DeleteLinkedAccount(w http.ResponseWriter, r *http.Request
 	if !hasAuth {
 		// Note the message sent here will be user facing
 		http.Error(w, "unable to unlink "+t+" account", code)
+		return
 	}
 
 	// Overwriting all values with "" is essentially deleting
@@ -189,75 +190,75 @@ func (h *CoreHandler) DeleteLinkedAccount(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 }
 
-// Updates the facebook auth info stored for a user with id <userID>
-// POST /v1/user/{userID}/authorize/facebook
-func (handler *CoreHandler) UpdateFacebookAuth(w http.ResponseWriter, r *http.Request) {
+/* Updates the facebook auth info stored for a user with id <userID>
+ * POST /v1/user/{userID}/authorize/{type}
+ * Where type is one of {twitter, reddit, facebook}
+ * Expected body:
+ *	{ "type": "reddit", "username": "%v", "token": "%v", "refresh-token": "%v"}
+ */
+func (h *CoreHandler) UpdateAccountAuth(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID, t := vars["userID"], vars["type"]
 
-	// TODO: We are currently not verifying that the user requesting this is in fact allowed to do so
+	hasAuth, code := h.hasAuthorization(userID, r)
+	if !hasAuth {
+		http.Error(w, "unable to update account auth for "+t+" account", code)
+		return
+	}
 
-	// Read body of the request
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("Error reading body: %v", err)
-		http.Error(w, "can't read body", http.StatusBadRequest)
+		http.Error(w, "unable to read request body", http.StatusBadRequest)
 		return
 	}
+	log.Printf("About to update %v auth information for user: %v", t, userID)
 
-	// Get the user id from path paramater
-	id := mux.Vars(r)["userID"]
-
-	log.Printf("About to update facebook auth information for user: %v", id)
-
-	// Change the body into a user object
 	auth := &ProviderAuth{}
-	err = json.Unmarshal(body, auth)
-	if err != nil {
-		log.Printf("Error parsing request body when updating facebook auth for user: %v - %v", id, err)
-		http.Error(w, "can't parse body", http.StatusBadRequest)
+	if err := json.Unmarshal(body, auth); err != nil {
+		log.Printf("Error parsing request body when updating %v auth for user: %v - %v", t, userID, err)
+		http.Error(w, "unable to parse body", http.StatusBadRequest)
 		return
 	}
 
-	successful := handler.Driver.UpdateFacebookAccount(id, auth.Username, auth.Token)
-	if !successful {
-		w.WriteHeader(http.StatusInternalServerError)
+	if err, code := h.insertAuth(userID, t, *auth); err != nil {
+		w.WriteHeader(code)
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
 }
 
-// Updates the twitter oauth token and secret stored for a user with id <userID>
-// POST /v1/user/{userID}/authorize/twitter
-func (handler *CoreHandler) UpdateTwitterAuth(w http.ResponseWriter, r *http.Request) {
-	// TODO: We are currently not verifying that the user requesting this is in fact allowed to do so
-
-	// Read body of the request
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.Printf("Error reading body: %v", err)
-		http.Error(w, "can't read body", http.StatusBadRequest)
-		return
+func (h *CoreHandler) updateRedditAuth(userID string, auth ProviderAuth) (error, int) {
+	if !validRedditAuth(auth) {
+		msg := fmt.Sprintf("Received empty field in provided auth body while updating reddit account")
+		log.Println(msg)
+		return errors.New(msg), http.StatusBadRequest
 	}
 
-	// Get the user id from path paramater
-	id := mux.Vars(r)["userID"]
-
-	// Change the body into a user object
-	auth := &ProviderAuth{}
-	err = json.Unmarshal(body, auth)
-	if err != nil {
-		log.Printf("Error parsing request body when updating reddit auth for user: %v - %v", id, err)
-		http.Error(w, "can't parse body", http.StatusBadRequest)
-		return
-	}
-
-	log.Printf("received the following twitter auth: %+v", auth)
-
-	successful := handler.Driver.UpdateTwitterAccount(id, auth.Username, auth.Token, auth.Secret)
+	successful := h.Driver.UpdateRedditAccount(userID, auth.Username, auth.Token, auth.Secret)
 	if !successful {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return errors.New("unable to reddit account info"), http.StatusInternalServerError
 	}
-	w.WriteHeader(http.StatusOK)
+
+	return nil, http.StatusOK
+}
+
+func (h *CoreHandler) insertAuth(userID, t string, auth ProviderAuth) (err error, code int) {
+	if t == "reddit" {
+		err, code = h.updateRedditAuth(userID, auth)
+	} else if t == "facebook" {
+		if !h.Driver.UpdateFacebookAccount(userID, auth.Username, auth.Token) {
+			err, code = errors.New("unable to update facebook account info"), http.StatusInternalServerError
+		}
+	} else if t == "twitter" {
+		if !h.Driver.UpdateTwitterAccount(userID, auth.Username, auth.Token, auth.RefreshToken) {
+			err, code = errors.New("unable to update facebook account info"), http.StatusInternalServerError
+		}
+	} else {
+		return fmt.Errorf("received unrecognized account type %v", t), http.StatusBadRequest
+	}
+
+	return err, code
 }
 
 /* This function is used for determining if a specific user has access to a specific endpoint
@@ -285,53 +286,6 @@ func (handler *CoreHandler) hasAuthorization(user string, r *http.Request) (bool
 	}
 
 	return true, http.StatusOK
-}
-
-/* Updates the reddit oauth token/refresh stored for a user with id <userID>
- * POST /v1/user/{userID}/authorize/reddit
- * Expected body:
- *	{ "type": "reddit", "username": "%v", "token": "%v", "refresh-token": "%v"}
- */
-func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Request) {
-	userID := mux.Vars(r)["userID"]
-	hasAuth, code := handler.hasAuthorization(userID, r)
-	if !hasAuth {
-		log.Printf("Unable to complete request to updateRedditAuth")
-		http.Error(w, "unable to complete request", code)
-		return
-	}
-
-	// Read body of the request
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.Printf("Error reading body: %v", err)
-		http.Error(w, "unable to read request body", http.StatusBadRequest)
-		return
-	}
-
-	// Change the body into a auth object
-	auth := ProviderAuth{}
-	if err = json.Unmarshal(body, &auth); err != nil {
-		log.Printf("Error parsing request body when updating reddit auth for user: %v - %v", userID, err)
-		http.Error(w, "unable to parse request body", http.StatusBadRequest)
-		return
-	}
-
-	// We require the following fields (username, token, refresh-token) to be non-empty
-	if !validRedditAuth(auth) {
-		log.Printf("Received empty field in provided auth body while updating reddit account")
-		http.Error(w, "missing field in reddit auth update - (username, token, refresh-token)"+
-			"must be non-empty", http.StatusBadRequest)
-		return
-	}
-
-	ok := handler.Driver.UpdateRedditAccount(userID, auth.Username, auth.Token, auth.RefreshToken)
-	if !ok {
-		log.Printf("Unable to update reddit account for user %v", userID)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
 }
 
 func validRedditAuth(auth ProviderAuth) bool {

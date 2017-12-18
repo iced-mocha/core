@@ -12,10 +12,8 @@ type CoreAPI interface {
 	Logout(w http.ResponseWriter, r *http.Request)
 	IsLoggedIn(w http.ResponseWriter, r *http.Request)
 	TwitterAuth(w http.ResponseWriter, r *http.Request)
-	UpdateTwitterAuth(w http.ResponseWriter, r *http.Request)
 	RedditAuth(w http.ResponseWriter, r *http.Request)
-	UpdateRedditAuth(w http.ResponseWriter, r *http.Request)
 	UpdateWeights(w http.ResponseWriter, r *http.Request)
-	UpdateFacebookAuth(w http.ResponseWriter, r *http.Request)
+	UpdateAccountAuth(w http.ResponseWriter, r *http.Request)
 	DeleteLinkedAccount(w http.ResponseWriter, r *http.Request)
 }
