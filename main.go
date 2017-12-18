@@ -57,7 +57,7 @@ func main() {
 	c := cache.New(30*time.Minute, 45*time.Minute)
 
 	// Create our handler
-	handler, err := handlers.New(driver, *sm, config, c)
+	handler, err := handlers.New(driver, sm, config, c)
 	if err != nil {
 		log.Fatalf("Unable to create handler", err)
 	}

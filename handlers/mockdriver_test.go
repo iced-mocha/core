@@ -10,8 +10,8 @@ type MockDriver struct {
 func (m *MockDriver) InsertUser(user models.User) error { return nil }
 
 func (m *MockDriver) GetUser(username string) (models.User, bool, error) {
-	if username == "exists" {
-		return models.User{}, true, nil
+	if username == "exists" || username == "userID" {
+		return models.User{Username: username, Password: "$2a$14$ljrYxvypCMju9hpgvEW.N.HaAgaK4fWHzJkXv/oEz7FS5HxBbWPTm"}, true, nil
 	}
 	return models.User{}, false, nil
 }

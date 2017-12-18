@@ -33,6 +33,7 @@ const (
 	DefaultFacebookWeight   = 10.0
 	DefaultHackerNewsWeight = 20.0
 	DefaultGoogleNewsWeight = 20.0
+	InternalErrorMsg        = "Unable to complete request. Please try again later."
 )
 
 var DefaultRssWeights = map[string]float64{
@@ -54,7 +55,7 @@ var DefaultRssGroups = map[string][]string{
 type CoreHandler struct {
 	Driver         storage.Driver
 	Config         config.Config
-	SessionManager sessions.Manager
+	SessionManager sessions.IManager
 	// TODO: Having a cache on core used for pagination requires us to only run
 	// one instance of core
 	Cache              *cache.Cache
@@ -64,7 +65,7 @@ type CoreHandler struct {
 	RssClient *rss.RSS
 }
 
-// Structure received when updating provider auth info
+// Structure received from one of our clients when updating their auth info
 type ProviderAuth struct {
 	Type         string `json:"type"`
 	Username     string `json:"username"`
@@ -73,7 +74,7 @@ type ProviderAuth struct {
 	Secret       string `json:"secret"`
 }
 
-func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cache) (*CoreHandler, error) {
+func New(d storage.Driver, sm *sessions.Manager, conf config.Config, c *cache.Cache) (*CoreHandler, error) {
 	handler := &CoreHandler{}
 	handler.Driver = d
 	handler.Config = conf
@@ -113,29 +114,26 @@ func New(d storage.Driver, sm sessions.Manager, conf config.Config, c *cache.Cac
 	return handler, nil
 }
 
-// POST /v1/weights
+/* POST /v1/{userID}/weights
+ * Expected body:
+ * 	{ "reddit": 4.0, "facebook": 60.4 ... RSS: { "fox": 50.4 } }
+ */
 func (h *CoreHandler) UpdateWeights(w http.ResponseWriter, r *http.Request) {
-	log.Printf("received request at POST /v1/weights")
-	s, err := h.SessionManager.GetSession(r)
-	if err != nil {
-		log.Printf("Could not get retrieve session for user: %v", err)
-		// Return unauthorized error -- but TODO: in the future differentiate between 401 and 500
-		w.WriteHeader(http.StatusUnauthorized)
+	userID := mux.Vars(r)["userID"]
+	log.Printf("Received request to update weights for user: %v", userID)
+
+	hasAuth, code := h.hasAuthorization(userID, r)
+	if !hasAuth {
+		log.Printf("Unable to update weights for user: %v", userID)
+		w.WriteHeader(code)
 		return
 	}
+	log.Printf("Preparing to update weights for user: %v", userID)
 
-	// Get user associate with the session
-	ui := s.Get("username")
-	username, ok := ui.(string)
-	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	log.Printf("Preparing to update weights for user: %v", username)
-
-	// Now get the user for the username
-	u, exists, err := h.Driver.GetUser(username)
+	// Now attempt to get the user for the username
+	u, exists, err := h.Driver.GetUser(userID)
 	if !exists || err != nil {
+		log.Printf("Unable to retireve user from database when trying to update weights")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -148,17 +146,14 @@ func (h *CoreHandler) UpdateWeights(w http.ResponseWriter, r *http.Request) {
 	}
 
 	weights := &models.Weights{}
-	err = json.Unmarshal(contents, weights)
-	if err != nil {
-		log.Printf("Unable to marshal weights object: %v", err)
+	if err := json.Unmarshal(contents, weights); err != nil {
+		log.Printf("Unable to marshal request body into weights object: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("Received the follow weights for user %v: %+v\n", u.Username, weights)
-
 	if !h.Driver.UpdateWeights(u.Username, *weights) {
-		log.Println(err)
+		// Insert our user with new weights into DB
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -167,141 +162,138 @@ func (h *CoreHandler) UpdateWeights(w http.ResponseWriter, r *http.Request) {
 }
 
 // Deletes the type of linked account for authenticated user in the request
-// DELETE /v1/users/accounts/{type}
+// DELETE /v1/users/{userID}/accounts/{type}
+// type must be one of {reddit, facebook, twitter}
 func (h *CoreHandler) DeleteLinkedAccount(w http.ResponseWriter, r *http.Request) {
-	s, err := h.SessionManager.GetSession(r)
-	if err != nil {
-		log.Printf("Could not get retrieve session for user: %v", err)
-		// Return unauthorized error -- but TODO: in the future differentiate between 401 and 500
-		w.WriteHeader(http.StatusUnauthorized)
+	vars := mux.Vars(r)
+	userID := vars["userID"]
+	t := vars["type"]
+
+	hasAuth, code := h.hasAuthorization(userID, r)
+	if !hasAuth {
+		// Note the message sent here will be user facing
+		http.Error(w, "unable to unlink "+t+" account", code)
 		return
 	}
 
-	// Get user associate with the session
-	ui := s.Get("username")
-	username, ok := ui.(string)
-	if !ok {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	// Parse the type of account to remove
-	t := mux.Vars(r)["type"]
-
+	// Overwriting all values with "" is essentially deleting
 	if t == "reddit" {
-		// Overwriting all values with "" is essentially deleting
-		h.Driver.UpdateRedditAccount(username, "", "", "")
+		h.Driver.UpdateRedditAccount(userID, "", "", "")
 	} else if t == "facebook" {
-		h.Driver.UpdateFacebookAccount(username, "", "")
+		h.Driver.UpdateFacebookAccount(userID, "", "")
 	} else if t == "twitter" {
-		h.Driver.UpdateTwitterAccount(username, "", "", "")
+		h.Driver.UpdateTwitterAccount(userID, "", "", "")
+	} else {
+		http.Error(w, "received unrecognized account type "+t, http.StatusBadRequest)
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)
 }
 
-// Updates the facebook auth info stored for a user with id <userID>
-// POST /v1/user/{userID}/authorize/facebook
-func (handler *CoreHandler) UpdateFacebookAuth(w http.ResponseWriter, r *http.Request) {
+/* Updates the facebook auth info stored for a user with id <userID>
+ * POST /v1/user/{userID}/authorize/{type}
+ * Where type is one of {twitter, reddit, facebook}
+ * Expected body:
+ *	{ "type": "reddit", "username": "%v", "token": "%v", "refresh-token": "%v"}
+ */
+func (h *CoreHandler) UpdateAccountAuth(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userID, t := vars["userID"], vars["type"]
 
-	// TODO: We are currently not verifying that the user requesting this is in fact allowed to do so
+	hasAuth, code := h.hasAuthorization(userID, r)
+	if !hasAuth {
+		http.Error(w, "unable to update account auth for "+t+" account", code)
+		return
+	}
 
-	// Read body of the request
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("Error reading body: %v", err)
-		http.Error(w, "can't read body", http.StatusBadRequest)
+		http.Error(w, "unable to read request body", http.StatusBadRequest)
 		return
 	}
+	log.Printf("About to update %v auth information for user: %v", t, userID)
 
-	// Get the user id from path paramater
-	id := mux.Vars(r)["userID"]
-
-	log.Printf("About to update facebook auth information for user: %v", id)
-
-	// Change the body into a user object
 	auth := &ProviderAuth{}
-	err = json.Unmarshal(body, auth)
-	if err != nil {
-		log.Printf("Error parsing request body when updating facebook auth for user: %v - %v", id, err)
-		http.Error(w, "can't parse body", http.StatusBadRequest)
+	if err := json.Unmarshal(body, auth); err != nil {
+		log.Printf("Error parsing request body when updating %v auth for user: %v - %v", t, userID, err)
+		http.Error(w, "unable to parse body", http.StatusBadRequest)
 		return
 	}
 
-	successful := handler.Driver.UpdateFacebookAccount(id, auth.Username, auth.Token)
-	if !successful {
-		w.WriteHeader(http.StatusInternalServerError)
+	if err, code := h.insertAuth(userID, t, *auth); err != nil {
+		w.WriteHeader(code)
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
 }
 
-// Updates the twitter oauth token and secret stored for a user with id <userID>
-// POST /v1/user/{userID}/authorize/twitter
-func (handler *CoreHandler) UpdateTwitterAuth(w http.ResponseWriter, r *http.Request) {
-	// TODO: We are currently not verifying that the user requesting this is in fact allowed to do so
-
-	// Read body of the request
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.Printf("Error reading body: %v", err)
-		http.Error(w, "can't read body", http.StatusBadRequest)
-		return
+// Inserts the provider auth for Reddit if it has the required keys
+func (h *CoreHandler) updateRedditAuth(userID string, auth ProviderAuth) (error, int) {
+	if !validRedditAuth(auth) {
+		msg := fmt.Sprintf("Received empty field in provided auth body while updating reddit account")
+		log.Println(msg)
+		return errors.New(msg), http.StatusBadRequest
 	}
 
-	// Get the user id from path paramater
-	id := mux.Vars(r)["userID"]
-
-	// Change the body into a user object
-	auth := &ProviderAuth{}
-	err = json.Unmarshal(body, auth)
-	if err != nil {
-		log.Printf("Error parsing request body when updating reddit auth for user: %v - %v", id, err)
-		http.Error(w, "can't parse body", http.StatusBadRequest)
-		return
-	}
-
-	log.Printf("received the following twitter auth: %+v", auth)
-
-	successful := handler.Driver.UpdateTwitterAccount(id, auth.Username, auth.Token, auth.Secret)
+	successful := h.Driver.UpdateRedditAccount(userID, auth.Username, auth.Token, auth.Secret)
 	if !successful {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		return errors.New("unable to reddit account info"), http.StatusInternalServerError
 	}
-	w.WriteHeader(http.StatusOK)
+
+	return nil, http.StatusOK
 }
 
-// Updates the reddit oauth token stored for a user with id <userID>
-// POST /v1/user/{userID}/authorize/reddit
-func (handler *CoreHandler) UpdateRedditAuth(w http.ResponseWriter, r *http.Request) {
-	// TODO: We are currently not verifying that the user requesting this is in fact allowed to do so
+// Inserts the ProviderAuth object for the given type t
+func (h *CoreHandler) insertAuth(userID, t string, auth ProviderAuth) (err error, code int) {
+	if t == "reddit" {
+		err, code = h.updateRedditAuth(userID, auth)
+	} else if t == "facebook" {
+		if !h.Driver.UpdateFacebookAccount(userID, auth.Username, auth.Token) {
+			err, code = errors.New("unable to update facebook account info"), http.StatusInternalServerError
+		}
+	} else if t == "twitter" {
+		if !h.Driver.UpdateTwitterAccount(userID, auth.Username, auth.Token, auth.RefreshToken) {
+			err, code = errors.New("unable to update facebook account info"), http.StatusInternalServerError
+		}
+	} else {
+		return fmt.Errorf("received unrecognized account type %v", t), http.StatusBadRequest
+	}
 
-	// Read body of the request
-	body, err := ioutil.ReadAll(r.Body)
+	return err, code
+}
+
+/* This function is used for determining if a specific user has access to a specific endpoint
+ * based on the cookies attached to the incoming request.
+ * Checks to see if the incoming request r has authorization to modify resources for the given user.
+ * Returns: True/False depending on if they have access
+ *			Appropriate http status code to return if access is denied
+ */
+func (handler *CoreHandler) hasAuthorization(user string, r *http.Request) (bool, int) {
+	// First we must verify that the incoming request is allowed to modify this users data
+	s, err := handler.SessionManager.GetSession(r)
 	if err != nil {
-		log.Printf("Error reading body: %v", err)
-		http.Error(w, "can't read body", http.StatusBadRequest)
-		return
+		log.Printf("Unable to find valid session for incoming request for user %v", user)
+		return false, http.StatusUnauthorized
 	}
 
-	// Get the user id from path paramater
-	id := mux.Vars(r)["userID"]
-
-	// Change the body into a user object
-	auth := &ProviderAuth{}
-	err = json.Unmarshal(body, auth)
-	if err != nil {
-		log.Printf("Error parsing request body when updating reddit auth for user: %v - %v", id, err)
-		http.Error(w, "can't parse body", http.StatusBadRequest)
-		return
+	// Get the username associated to the retriever session
+	ui := s.Get("username")
+	if username, ok := ui.(string); !ok {
+		// Error parsing the stored username
+		return false, http.StatusInternalServerError
+	} else if username != user {
+		// An attempt to update another users information
+		return false, http.StatusForbidden
 	}
 
-	successful := handler.Driver.UpdateRedditAccount(id, auth.Username, auth.Token, auth.RefreshToken)
-	if !successful {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
+	return true, http.StatusOK
+}
+
+// Ensures that the ProviderAuth is valid for updating a Reddit account
+func validRedditAuth(auth ProviderAuth) bool {
+	return auth.Type == "reddit" && auth.Username != "" && auth.Token != "" && auth.RefreshToken != ""
 }
 
 // Redirects to our reddit client to authorize or service to use reddit account
@@ -324,6 +316,8 @@ func (handler *CoreHandler) TwitterAuth(w http.ResponseWriter, r *http.Request) 
 	http.Redirect(w, r, "https://"+host+":"+strconv.Itoa(port)+"/v1/"+userID+"/authorize", http.StatusMovedPermanently)
 }
 
+// TODO: Probably isnt safe to have this endpoint as it could allow for an easy brute force attack
+// Will have to move front-end away from using before removing - or moving to something like /v1/users/{userID}/loggedIn
 func (handler *CoreHandler) IsLoggedIn(w http.ResponseWriter, r *http.Request) {
 	// First check to see if the user is already logged in
 	_, err := handler.SessionManager.GetSession(r)
@@ -336,40 +330,46 @@ func (handler *CoreHandler) IsLoggedIn(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{ "logged-in": true }`))
 }
 
+// POST /v1/logout
 func (handler *CoreHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	// On logout all we need to do is destroy our cookies and session data
-	log.Printf("Logging out user")
 	handler.SessionManager.SessionDestroy(w, r)
 	w.WriteHeader(http.StatusOK)
 }
 
 func buildJSONError(message string) string {
-	return `{ "error": "` + message + `" }`
+	return fmt.Sprintf(`{ "error": "%v" }`, message)
 }
 
+/* POST /v1/login
+ * Expected body:
+ *   { "username": "%v", "password": "%v" }
+ * Note: Error messages here are user facing
+ */
 func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("Error reading body: %v", err)
-		http.Error(w, buildJSONError("bad request when attempting to login"), http.StatusBadRequest)
+		http.Error(w, buildJSONError(InternalErrorMsg), http.StatusBadRequest)
 		return
 	}
 
-	// NOTE: We expect a user object but username and password are all that will be non-empty
-	log.Printf("Received the following user to login: %v", string(body))
-
-	// Marshal the body into a user object
 	attemptedUser := &models.User{}
 	if err := json.Unmarshal(body, attemptedUser); err != nil {
-		log.Printf("Error parsing body: %v", err)
-		http.Error(w, buildJSONError("bad request when attempting to login"), http.StatusBadRequest)
+		http.Error(w, buildJSONError(InternalErrorMsg), http.StatusBadRequest)
 		return
 	}
+
+	// If there is no username or password we cannot log a user in
+	if attemptedUser.Username == "" || attemptedUser.Password == "" {
+		http.Error(w, buildJSONError("Username and password both must be non empty when trying to login"), http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Received the following user to login: %v", attemptedUser.Username)
 
 	// First check to see if the user is already logged in
 	if handler.SessionManager.HasSession(r) {
-		log.Printf("User %v attempted to log in, but they are already logged in.", attemptedUser.Username)
-		// Not sure if this should be an error
+		// Already logged in so the request has succeeded
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -377,26 +377,25 @@ func (handler *CoreHandler) Login(w http.ResponseWriter, r *http.Request) {
 	// Get the actual user for the given username
 	actualUser, exists, err := handler.Driver.GetUser(attemptedUser.Username)
 	if err != nil {
-		log.Printf("Unable to retrieve user: %v", err)
-		http.Error(w, buildJSONError("internal server error when attempting to login"), http.StatusInternalServerError)
+		log.Printf("Unable to retrieve user %v from db: %v", attemptedUser.Username, err)
+		http.Error(w, buildJSONError(InternalErrorMsg), http.StatusInternalServerError)
 		return
 	}
 
 	// If the user does not exist return 401 (Unauthorized) for security reasons
 	if !exists {
 		log.Printf("Requested user %v does not exist", attemptedUser.Username)
-		http.Error(w, buildJSONError("incorrect username or password"), http.StatusUnauthorized)
+		http.Error(w, buildJSONError("Incorrect username or password"), http.StatusUnauthorized)
 		return
 	}
 
 	// Otherwise the user exists so lets see if we were provided correct credentials
 	// NOTE: attemptedUser.Password is plaintext and actualUser.Password is bcrypted hash of password
-	log.Printf("actualUser.Password: %v", actualUser.Password)
 	valid := creds.CheckPasswordHash(attemptedUser.Password, actualUser.Password)
 	if !valid {
 		// Not valid so return unauthorized
 		log.Printf("Bad credentials attempting to authenticate user %v", attemptedUser.Username)
-		http.Error(w, buildJSONError("incorrect username or password"), http.StatusUnauthorized)
+		http.Error(w, buildJSONError("Incorrect username or password"), http.StatusUnauthorized)
 		return
 	}
 
