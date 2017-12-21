@@ -3,9 +3,9 @@ package rss
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/iced-mocha/core/clients"
 	"github.com/iced-mocha/shared/models"

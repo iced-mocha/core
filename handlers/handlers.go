@@ -161,6 +161,44 @@ func (h *CoreHandler) UpdateWeights(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func (h *CoreHandler) UpdateRssFeeds(w http.ResponseWriter, r *http.Request) {
+	userID := mux.Vars(r)["userID"]
+
+	hasAuth, code := h.hasAuthorization(userID, r)
+	if !hasAuth {
+		w.WriteHeader(code)
+		return
+	}
+
+	u, exists, err := h.Driver.GetUser(userID)
+	if !exists || err != nil {
+		log.Printf("Unable to retrieve user from database when trying to update weights")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	contents, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	var feeds map[string][]string
+	if err := json.Unmarshal(contents, &feeds); err != nil {
+		log.Printf("Unable to marshal request body into weights object: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Driver.UpdateRssFeeds(u.Username, feeds); err != nil {
+		log.Printf("Unable to update rss feeds: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 // Deletes the type of linked account for authenticated user in the request
 // DELETE /v1/users/{userID}/accounts/{type}
 // type must be one of {reddit, facebook, twitter}

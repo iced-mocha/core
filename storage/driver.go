@@ -13,6 +13,8 @@ type Driver interface {
 
 	UpdateWeights(username string, weights models.Weights) bool
 
+	UpdateRssFeeds(username string, feeds map[string][]string) error
+
 	UpdateRedditAccount(userID, redditUser, authToken, refreshToken string) bool
 
 	UpdateTwitterAccount(userID, twitterUser, authToken, secret string) bool

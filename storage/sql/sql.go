@@ -400,6 +400,31 @@ func (d *driver) UpdateOAuthToken(username, token, expiry string) bool {
 	return n > 0
 }
 
+func (d *driver) UpdateRssFeeds(username string, feeds map[string][]string) error {
+	caseArgs := make([]interface{}, 0)
+	caseVals := []string{}
+	whereArgs := make([]interface{}, 0)
+	whereVals := []string{}
+	for name, feeds := range feeds {
+		caseArgs = append(caseArgs, username, name, strings.Join(feeds, ","))
+		caseVals = append(caseVals, "WHEN ? || ? THEN ?")
+		whereArgs = append(whereArgs, username, name)
+		whereVals = append(whereVals, "? || ?")
+	}
+	_, err := d.db.Exec(`
+		UPDATE Rss SET Feeds = CASE Username || Name
+			`+strings.Join(caseVals, " ")+`
+			ELSE Feeds
+			END
+		WHERE Username || Name IN (`+strings.Join(whereVals, ",")+`)
+	`, append(caseArgs, whereArgs...)...)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Creates a new driver containing pointer to sqlite db object
 func New(config Config) (*driver, error) {
 	var dbPath string

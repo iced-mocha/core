@@ -23,7 +23,7 @@ func New(api handlers.CoreAPI) (*Server, error) {
 	s.Router.HandleFunc("/v1/login", api.Login).Methods("POST")
 	s.Router.HandleFunc("/v1/logout", api.Logout).Methods("POST")
 	s.Router.HandleFunc("/v1/loggedin", api.IsLoggedIn).Methods("GET")
-
+	s.Router.HandleFunc("/v1/users/{userID}/rss", api.UpdateRssFeeds).Methods("POST")
 	s.Router.HandleFunc("/v1/users/{userID}/accounts/{type}", api.DeleteLinkedAccount).Methods("DELETE")
 
 	s.Router.HandleFunc("/v1/users/{userID}/authorize/twitter", api.TwitterAuth).Methods("GET")
