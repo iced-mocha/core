@@ -401,6 +401,18 @@ func (d *driver) UpdateOAuthToken(username, token, expiry string) bool {
 }
 
 func (d *driver) UpdateRssFeeds(username string, feeds map[string][]string) error {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err == nil {
+			tx.Commit()
+		} else {
+			tx.Rollback()
+		}
+	}()
+
 	caseArgs := make([]interface{}, 0)
 	caseVals := []string{}
 	whereArgs := make([]interface{}, 0)
@@ -411,7 +423,7 @@ func (d *driver) UpdateRssFeeds(username string, feeds map[string][]string) erro
 		whereArgs = append(whereArgs, username, name)
 		whereVals = append(whereVals, "? || ?")
 	}
-	_, err := d.db.Exec(`
+	_, err = tx.Exec(`
 		UPDATE Rss SET Feeds = CASE Username || Name
 			`+strings.Join(caseVals, " ")+`
 			ELSE Feeds
@@ -419,6 +431,21 @@ func (d *driver) UpdateRssFeeds(username string, feeds map[string][]string) erro
 		WHERE Username || Name IN (`+strings.Join(whereVals, ",")+`)
 	`, append(caseArgs, whereArgs...)...)
 	if err != nil {
+		return err
+	}
+
+	values := []string{}
+	args := make([]interface{}, 0)
+	for name := range feeds {
+		values = append(values, "?")
+		args = append(args, name)
+	}
+
+	_, err = tx.Exec(`
+		DELETE FROM Rss WHERE NOT Name IN (`+strings.Join(values, ",")+`) AND Username=?
+	`, append(args, username)...)
+	if err != nil {
+		log.Println(err)
 		return err
 	}
 
