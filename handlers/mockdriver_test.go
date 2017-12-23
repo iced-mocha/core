@@ -30,6 +30,10 @@ func (m *MockDriver) UpdateFacebookAccount(userID, facebookUser, authToken strin
 	return true
 }
 
+func (m *MockDriver) UpdateRssFeeds(username string, feeds map[string][]string) error {
+	return nil
+}
+
 func (m *MockDriver) UpdateWeights(username string, weights models.Weights) bool { return true }
 
 func (m *MockDriver) UpdateOAuthToken(userID, token, expiry string) bool { return true }
