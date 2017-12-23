@@ -22,36 +22,41 @@ type Reddit struct {
 }
 
 func New(host string, port int) *Reddit {
-	// Load reddit-clients certifiate so we know we can trust reddit-client
-	caCert, err := ioutil.ReadFile("/usr/local/etc/ssl/certs/reddit.crt")
+	// Only needed to test locally to allow for use of self signed certs
+	cert, err := ioutil.ReadFile("/usr/local/etc/ssl/certs/reddit.crt")
 	if err != nil {
 		log.Fatal(err)
 	}
-	caCertPool := x509.NewCertPool()
-	caCertPool.AppendCertsFromPEM(caCert)
+	certPool := x509.NewCertPool()
+	certPool.AppendCertsFromPEM(cert)
 
 	client := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				RootCAs: caCertPool,
+				RootCAs: certPool,
 			},
 		},
 	}
 	return &Reddit{Host: host, Port: port, client: client}
 }
 
-func (r *Reddit) GetPageGenerator(user *models.User) (func() []models.Post, error) {
-	var authToken, refreshToken, nextURL string
-
+func (r *Reddit) GetStartingURL(user *models.User) string {
 	if user == nil || user.RedditUsername == "" {
-		log.Printf("Getting default reddit page generator.")
-		nextURL = fmt.Sprintf("https://%v:%v/v1/posts", r.Host, r.Port)
-	} else {
-		log.Printf("Getting reddit page generator for user: %v", user.Username)
-		authToken = user.RedditAuthToken
-		refreshToken = user.RedditRefreshToken
-		// TODO: Eventually we will first have to check if the reddit token will expire
-		nextURL = fmt.Sprintf("https://%v:%v/v1/%v/posts", r.Host, r.Port, user.RedditUsername)
+		log.Printf("Unauthenticated user detected using default reddit page generator.")
+		return fmt.Sprintf("https://%v:%v/v1/posts", r.Host, r.Port)
+	}
+
+	log.Printf("Getting reddit page generator for user: %v", user.Username)
+	return fmt.Sprintf("https://%v:%v/v1/%v/posts", r.Host, r.Port, user.RedditUsername)
+}
+
+func (r *Reddit) GetPageGenerator(user *models.User) (func() []models.Post, error) {
+	var authToken, refreshToken string
+
+	nextURL := r.GetStartingURL(user)
+
+	if user != nil {
+		authToken, refreshToken = user.RedditAuthToken, user.RedditRefreshToken
 	}
 
 	getNextPage := func() []models.Post {
@@ -63,6 +68,7 @@ func (r *Reddit) GetPageGenerator(user *models.User) (func() []models.Post, erro
 			return []models.Post{}
 		}
 
+		// Next URL is specified by reddit client
 		nextURL = resp.NextURL
 		return resp.Posts
 	}
@@ -80,29 +86,35 @@ func (r *Reddit) Weight() float64 {
 
 func (r *Reddit) getPosts(url, redditToken, refreshToken string) clients.PostResponse {
 	posts := []models.Post{}
-	jsonString := []byte(fmt.Sprintf(`{ "bearer-token": "%v", "refresh-token": "%v"}`, redditToken, refreshToken))
-	req, err := http.NewRequest(http.MethodGet, url, bytes.NewBuffer(jsonString))
+
+	// TODO Reddit-Clients GetPosts endpoint should accept request w/o these
+	requestBody := []byte(fmt.Sprintf(`{"bearer-token": "%v", "refresh-token": "%v"}`, redditToken, refreshToken))
+
+	req, err := http.NewRequest(http.MethodGet, url, bytes.NewBuffer(requestBody))
 	if err != nil {
 		return clients.PostResponse{posts, "", err}
 	}
 
-	redditResp, err := r.client.Do(req)
+	resp, err := r.client.Do(req)
 	if err != nil {
 		return clients.PostResponse{posts, "", fmt.Errorf("Unable to get posts from reddit: %v", err)}
 	}
-	defer redditResp.Body.Close()
+	defer resp.Body.Close()
 
-	if redditResp.StatusCode != http.StatusOK {
-		return clients.PostResponse{posts, "", fmt.Errorf("Unable to get posts from reddit received status code: %v", redditResp.StatusCode)}
+	if resp.StatusCode != http.StatusOK {
+		return clients.PostResponse{posts, "", fmt.Errorf("Unable to get posts from reddit received status code: %v", resp.StatusCode)}
+	}
+
+	contents, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return clients.PostResponse{posts, "", fmt.Errorf("Unable to get posts from reddit received status code: %v", resp.StatusCode)}
 	}
 
 	clientResp := models.ClientResp{}
-	err = json.NewDecoder(redditResp.Body).Decode(&clientResp)
-	posts = clientResp.Posts
-	if err != nil {
+	if json.Unmarshal(contents, &clientResp); err != nil {
 		return clients.PostResponse{posts, "", fmt.Errorf("Unable to decode posts from Reddit: %v", err)}
 	}
 
 	log.Println("Successfully retrieved posts from reddit")
-	return clients.PostResponse{posts, clientResp.NextURL, nil}
+	return clients.PostResponse{clientResp.Posts, clientResp.NextURL, nil}
 }

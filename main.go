@@ -48,7 +48,7 @@ func main() {
 	}
 
 	// Create our sessions manager
-	sm, err := sessions.NewManager("memory", "icedmochasecret", 3600)
+	sm, err := sessions.NewManager("memory", "icedmochasecret", 3600*24*365)
 	if err != nil {
 		log.Fatalf("Unable to create session manager: %v", err)
 	}

@@ -33,7 +33,9 @@ const (
 	DefaultFacebookWeight   = 10.0
 	DefaultHackerNewsWeight = 20.0
 	DefaultGoogleNewsWeight = 20.0
-	InternalErrorMsg        = "Unable to complete request. Please try again later."
+
+	// This is the default message used for sending back to client. I.e this will be show in dialogs in front-end
+	InternalErrorMsg = "Unable to complete request. Please try again later."
 )
 
 var DefaultRssWeights = map[string]float64{
@@ -646,6 +648,7 @@ func (handler *CoreHandler) getContentProviders(user *models.User) []*ranking.Co
 func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	s, err := handler.SessionManager.GetSession(r)
 	if err != nil {
+		// Session could not be found so get the posts for a generic user
 		handler.getPostsForUser(nil, w, r)
 		return
 	}
@@ -664,8 +667,8 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler *CoreHandler) GetProviders(user *models.User, r *http.Request) ([]*ranking.ContentProvider, error) {
-	token := r.FormValue("page_token")
-	if token != "" {
+	// First check if there are content providers in our cache
+	if token := r.FormValue("page_token"); token != "" {
 		if p, ok := handler.Cache.Get(token); ok {
 			providers, ok := p.([]*ranking.ContentProvider)
 			if !ok {
