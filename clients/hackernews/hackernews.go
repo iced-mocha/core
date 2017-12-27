@@ -20,7 +20,11 @@ func New(host string, port int) *HackerNews {
 	return &HackerNews{Host: host, Port: port}
 }
 
-func (h *HackerNews) GetPageGenerator(user *models.User) (func() []models.Post, error) {
+func (h *HackerNews) GetDefaultPageGenerator() (func() []models.Post, error) {
+	return h.GetPageGenerator(models.User{})
+}
+
+func (h *HackerNews) GetPageGenerator(user models.User) (func() []models.Post, error) {
 	nextURL := fmt.Sprintf("http://%v:%v/v1/posts?count=20", h.Host, h.Port)
 	getNextPage := func() []models.Post {
 		if nextURL == "" {

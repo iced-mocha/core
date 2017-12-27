@@ -20,8 +20,16 @@ func New(host string, port int) *Facebook {
 	return &Facebook{Host: host, Port: port}
 }
 
-func (f *Facebook) GetPageGenerator(user *models.User) (func() []models.Post, error) {
-	if user == nil || user.FacebookAuthToken == "" {
+func (f *Facebook) GetDefaultPageGenerator() (func() []models.Post, error) {
+	defaultPosts := func() []models.Post {
+		return []models.Post{}
+	}
+
+	return defaultPosts, nil
+}
+
+func (f *Facebook) GetPageGenerator(user models.User) (func() []models.Post, error) {
+	if user.FacebookAuthToken == "" {
 		return nil, clients.InvalidAuth{f.Name(), "empty auth token"}
 	}
 
