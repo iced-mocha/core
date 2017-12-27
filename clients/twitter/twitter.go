@@ -40,8 +40,17 @@ func New(host string, port int) *Twitter {
 	return &Twitter{Host: host, Port: port, client: client}
 }
 
-func (t *Twitter) GetPageGenerator(user *models.User) (func() []models.Post, error) {
-	if user == nil || user.TwitterUsername == "" {
+// We currently do not support unauthenticated twitter posts
+func (t *Twitter) GetDefaultPageGenerator() (func() []models.Post, error) {
+	defaultPosts := func() []models.Post {
+		return []models.Post{}
+	}
+
+	return defaultPosts, nil
+}
+
+func (t *Twitter) GetPageGenerator(user models.User) (func() []models.Post, error) {
+	if user.TwitterUsername == "" {
 		log.Printf("Getting unauthenicated twitter page generator.")
 		//nextURL = fmt.Sprintf("https://%v:%v/v1/posts", r.Host, r.Port)
 		// TODO: Currently dont support this so

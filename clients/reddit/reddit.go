@@ -40,8 +40,8 @@ func New(host string, port int) *Reddit {
 	return &Reddit{Host: host, Port: port, client: client}
 }
 
-func (r *Reddit) GetStartingURL(user *models.User) string {
-	if user == nil || user.RedditUsername == "" {
+func (r *Reddit) GetStartingURL(user models.User) string {
+	if user.RedditUsername == "" {
 		log.Printf("Unauthenticated user detected using default reddit page generator.")
 		return fmt.Sprintf("https://%v:%v/v1/posts", r.Host, r.Port)
 	}
@@ -50,18 +50,14 @@ func (r *Reddit) GetStartingURL(user *models.User) string {
 	return fmt.Sprintf("https://%v:%v/v1/%v/posts", r.Host, r.Port, user.RedditUsername)
 }
 
-func (r *Reddit) GetPageGenerator(user *models.User) (func() []models.Post, error) {
-	var authToken, refreshToken string
+func (r *Reddit) GetDefaultPageGenerator() (func() []models.Post, error) {
+	return r.GetPageGenerator(models.User{})
+}
 
+func (r *Reddit) GetPageGenerator(user models.User) (func() []models.Post, error) {
 	nextURL := r.GetStartingURL(user)
-
-	if user != nil {
-		authToken, refreshToken = user.RedditAuthToken, user.RedditRefreshToken
-	}
-
 	getNextPage := func() []models.Post {
-		log.Printf("Attemping to get reddit page with url: %v", nextURL)
-		resp := r.getPosts(nextURL, authToken, refreshToken)
+		resp := r.getPosts(nextURL, user.RedditAuthToken, user.RedditRefreshToken)
 		if resp.Err != nil {
 			nextURL = ""
 			log.Printf("Error getting reddit page %v", resp.Err)
@@ -95,6 +91,7 @@ func (r *Reddit) getPosts(url, redditToken, refreshToken string) clients.PostRes
 		return clients.PostResponse{posts, "", err}
 	}
 
+	log.Printf("Attemping to get reddit page with url: %v", url)
 	resp, err := r.client.Do(req)
 	if err != nil {
 		return clients.PostResponse{posts, "", fmt.Errorf("Unable to get posts from reddit: %v", err)}
@@ -114,6 +111,7 @@ func (r *Reddit) getPosts(url, redditToken, refreshToken string) clients.PostRes
 	if json.Unmarshal(contents, &clientResp); err != nil {
 		return clients.PostResponse{posts, "", fmt.Errorf("Unable to decode posts from Reddit: %v", err)}
 	}
+	log.Printf("Assigning next URL: %v", clientResp.NextURL)
 
 	log.Println("Successfully retrieved posts from reddit")
 	return clients.PostResponse{clientResp.Posts, clientResp.NextURL, nil}

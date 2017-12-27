@@ -34,6 +34,9 @@ const (
 	DefaultHackerNewsWeight = 20.0
 	DefaultGoogleNewsWeight = 20.0
 
+	// Number of posts to get in a single call to /v1/posts
+	pageSize = 40
+
 	// This is the default message used for sending back to client. I.e this will be show in dialogs in front-end
 	InternalErrorMsg = "Unable to complete request. Please try again later."
 )
@@ -65,6 +68,12 @@ type CoreHandler struct {
 
 	Clients   []clients.Client
 	RssClient *rss.RSS
+}
+
+// Structure returned by us after receiving a call to /v1/posts
+type PostsResponse struct {
+	Posts     []models.Post `json:"posts"`
+	PageToken string        `json:"page_token"`
 }
 
 // Structure received from one of our clients when updating their auth info
@@ -572,11 +581,7 @@ func getDefaultWeight(clientName string) float64 {
 	return float64(val)
 }
 
-func getWeight(clientName string, user *models.User) float64 {
-	if user == nil {
-		return getDefaultWeight(clientName)
-	}
-
+func getWeight(clientName string, user models.User) float64 {
 	var val float64
 
 	if clientName == "reddit" {
@@ -591,65 +596,117 @@ func getWeight(clientName string, user *models.User) float64 {
 		val = user.PostWeights.Twitter
 	}
 
-	return float64(val)
+	return val
 }
 
-// gets a list of content providers, one for each supported client. A content
-// provider structure stores information about the current page of data being
+// Produces a list of content providers for each of our supported clients.
+// A content provider structure stores information about the current page of data being
 // read from that content provider, and a function to get the next page of data.
-func (handler *CoreHandler) getContentProviders(user *models.User) []*ranking.ContentProvider {
-	providers := []*ranking.ContentProvider{}
-	// Construct a buffered channel to hold posts from each of our clients
-	numContentProviders := 0
+func (handler *CoreHandler) getProvidersForUser(user models.User) []*ranking.ContentProvider {
+	var numProviders int
+
+	// Construct a buffered channel to hold results from each of our client
 	ch := make(chan *ranking.ContentProvider)
-	for _, c := range handler.Clients {
-		generator, err := c.GetPageGenerator(user)
+	for _, client := range handler.Clients {
+		generator, err := client.GetPageGenerator(user)
 		if err != nil {
-			log.Printf("error getting page generator for %v: %v", c.Name(), err)
+			log.Printf("Unable to get page %v generator for user %v: %v", client.Name(), user.Username, err)
 			continue
 		}
 
-		numContentProviders++
+		numProviders++
 		go func(name string, ch chan *ranking.ContentProvider) {
 			// Sometimes user is nil when we are not authenticated
-			tw := getWeight(name, user)
-			ch <- ranking.NewContentProvider(tw, generator)
-		}(c.Name(), ch)
+			weight := getWeight(name, user)
+			ch <- ranking.NewContentProvider(weight, generator)
+		}(client.Name(), ch)
 	}
 
-	rssGroups := DefaultRssGroups
-	rssWeights := DefaultRssWeights
-	if user != nil {
-		rssGroups = user.RssGroups
-		rssWeights = user.PostWeights.RSS
-	}
+	// Increases the number of providers we have for each RSS feed that we trigger to get content providers
+	numProviders += handler.GetRSSProviders(ch, user.RssGroups, user.PostWeights.RSS)
 
-	for name, group := range rssGroups {
-		generator, err := handler.RssClient.GetPageGenerator(group)
+	return buildProviders(ch, numProviders)
+}
+
+// Gets the default providers for an unauthenticated user
+func (handler *CoreHandler) getDefaultProviders() []*ranking.ContentProvider {
+	println("Building default providers")
+	var numProviders int
+
+	// Construct a buffered channel to hold results from each of our client
+	ch := make(chan *ranking.ContentProvider)
+	for _, client := range handler.Clients {
+		// TODO implement this
+		generator, err := client.GetDefaultPageGenerator()
 		if err != nil {
-			log.Printf("error getting page generator for rss group %v: %v", name, err)
+			log.Printf("Unable to get default page generator for %v: %v", client.Name(), err)
 			continue
 		}
 
-		numContentProviders++
+		numProviders++
 		go func(name string, ch chan *ranking.ContentProvider) {
-			ch <- ranking.NewContentProvider(rssWeights[name], generator)
-		}(name, ch)
+			// Sometimes user is nil when we are not authenticated
+			weight := getDefaultWeight(name)
+			ch <- ranking.NewContentProvider(weight, generator)
+		}(client.Name(), ch)
 	}
 
-	for i := 0; i < numContentProviders; i++ {
+	// Increases the number of providers we have for each RSS feed that we trigger to get content providers
+	numProviders += handler.GetRSSProviders(ch, DefaultRssGroups, DefaultRssWeights)
+
+	return buildProviders(ch, numProviders)
+}
+
+// Reads n content providers off the given channel and returns them in slice form
+func buildProviders(ch chan *ranking.ContentProvider, n int) []*ranking.ContentProvider {
+	providers := []*ranking.ContentProvider{}
+	for i := 0; i < n; i++ {
+		// TODO: Probably we should have some sort of timeout mechanism
 		providers = append(providers, <-ch)
 	}
 
 	return providers
 }
 
+// Consumes a map of RSS groups, their weights and channel to put the results on
+// Returns the number of content providers successfully retrieved
+func (handler *CoreHandler) GetRSSProviders(ch chan *ranking.ContentProvider, groups map[string][]string, weights map[string]float64) int {
+	var numProviders int
+
+	for name, group := range groups {
+		generator, err := handler.RssClient.GetPageGenerator(group)
+		if err != nil {
+			log.Printf("Unable to get page generator for rss group %v: %v", name, err)
+			continue
+		}
+
+		numProviders++
+		go func(name string, ch chan *ranking.ContentProvider) {
+			ch <- ranking.NewContentProvider(weights[name], generator)
+		}(name, ch)
+	}
+
+	return numProviders
+}
+
 // GET /v1/posts
+// Produces the next set of posts for the incoming request specified by an optional
+// page_token query paramater
 func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
+	// First we must determine if the incoming user is making the request with a page_token
+	providers, err := handler.GetCachedProviders(r)
+	if err == nil {
+		// No error means we successfuly found providers in cache
+		handler.getPosts(w, providers)
+		return
+	}
+
+	// Otherwise we need to create new content providers
 	s, err := handler.SessionManager.GetSession(r)
 	if err != nil {
 		// Session could not be found so get the posts for a generic user
-		handler.getPostsForUser(nil, w, r)
+		providers = handler.getDefaultProviders()
+		handler.getPosts(w, providers)
 		return
 	}
 
@@ -663,55 +720,48 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	handler.getPostsForUser(&user, w, r)
+	providers = handler.getProvidersForUser(user)
+	handler.getPosts(w, providers)
 }
 
-func (handler *CoreHandler) GetProviders(user *models.User, r *http.Request) ([]*ranking.ContentProvider, error) {
-	// First check if there are content providers in our cache
+// Takes a request object and retrieves associated providers from cache if they exist
+// TODO: Eventually we will need someway to prevent any user from accessing another users posts
+func (handler *CoreHandler) GetCachedProviders(r *http.Request) ([]*ranking.ContentProvider, error) {
 	if token := r.FormValue("page_token"); token != "" {
+		log.Printf("received the following pageToken: %v", token)
 		if p, ok := handler.Cache.Get(token); ok {
+			// TODO: I wondering what the consequens w/ respect to garbage collection when storing a pointer
+			// to a location in the heap in a cache?
 			providers, ok := p.([]*ranking.ContentProvider)
 			if !ok {
 				log.Printf("Data associated to page token: %v malformed", token)
 				return nil, errors.New("malformed paging data")
 			}
-
+			log.Printf("Found providers in cache: %v", token)
 			// Able to retrieve providers from cache
 			return providers, nil
 		}
-
-		log.Printf("Unable to find data associated to page token: %v", token)
-		return nil, errors.New("data associated with page token not found")
 	}
 
-	return handler.getContentProviders(user), nil
+	log.Printf("Providers not found in cache")
+	return nil, errors.New("unable to retrieve content providers from cache")
 }
 
-func (handler *CoreHandler) getPostsForUser(user *models.User, w http.ResponseWriter, r *http.Request) {
-	providers, err := handler.GetProviders(user, r)
-	if err != nil {
-		log.Printf("Unable to get content providers")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	posts := ranking.GetPosts(providers, 20)
+// Responds to a request to /v1/posts using the given content providers
+// Also generates a new paging token where in the requesting user can access the next set of posts
+func (handler *CoreHandler) getPosts(w http.ResponseWriter, providers []*ranking.ContentProvider) {
+	posts := ranking.GetPosts(providers, pageSize)
 	pageToken := handler.getNextPagingToken()
 	handler.Cache.Set(pageToken, providers, cache.DefaultExpiration)
+
 	log.Printf("Received %v posts from content providers", len(posts))
-
-	w.Header().Set("Content-Type", "application/json")
-	res, err := json.Marshal(
-		// TODO define this outside this function
-		struct {
-			Posts     []models.Post `json:"posts"`
-			PageToken string        `json:"page_token"`
-		}{posts, pageToken})
-
+	log.Printf("Next paging token: %v", pageToken)
+	res, err := json.Marshal(PostsResponse{posts, pageToken})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.Write(res)
 }
