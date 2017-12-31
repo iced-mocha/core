@@ -28,8 +28,6 @@ import (
 )
 
 const (
-	AllType = "all"
-
 	DefaultRedditWeight     = 20.0
 	DefaultTwitterWeight    = 20.0
 	DefaultFacebookWeight   = 10.0
