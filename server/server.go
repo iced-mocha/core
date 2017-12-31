@@ -15,6 +15,7 @@ func New(api handlers.CoreAPI) (*Server, error) {
 	s := &Server{Router: mux.NewRouter()}
 
 	s.Router.HandleFunc("/v1/posts", api.GetPosts).Methods("GET")
+	s.Router.HandleFunc("/v1/posts/{type}", api.GetPostsType).Methods("GET")
 	s.Router.HandleFunc("/v1/users", api.InsertUser).Methods("POST")
 
 	// Uses session id in cookie to retrieve user id

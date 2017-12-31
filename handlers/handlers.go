@@ -28,6 +28,8 @@ import (
 )
 
 const (
+	AllType = "all"
+
 	DefaultRedditWeight     = 20.0
 	DefaultTwitterWeight    = 20.0
 	DefaultFacebookWeight   = 10.0
@@ -599,15 +601,35 @@ func getWeight(clientName string, user models.User) float64 {
 	return val
 }
 
+func (handler *CoreHandler) getClient(t string) (clients.Client, error) {
+	for _, client := range handler.Clients {
+		if client.Name() == t {
+			return client, nil
+		}
+	}
+
+	return nil, errors.New("Specified client not found")
+}
+
 // Produces a list of content providers for each of our supported clients.
 // A content provider structure stores information about the current page of data being
 // read from that content provider, and a function to get the next page of data.
-func (handler *CoreHandler) getProvidersForUser(user models.User) []*ranking.ContentProvider {
+func (handler *CoreHandler) getProvidersForUser(r *http.Request, user models.User) []*ranking.ContentProvider {
+	clientList := handler.Clients
+	if v, ok := mux.Vars(r)["type"]; ok {
+		// If a specific type was specified in the request we must modify the client list
+		c, err := handler.getClient(v)
+		if err != nil {
+			return []*ranking.ContentProvider{}
+		}
+		clientList = []clients.Client{c}
+	}
+
 	var numProviders int
 
 	// Construct a buffered channel to hold results from each of our client
 	ch := make(chan *ranking.ContentProvider)
-	for _, client := range handler.Clients {
+	for _, client := range clientList {
 		generator, err := client.GetPageGenerator(user)
 		if err != nil {
 			log.Printf("Unable to get page %v generator for user %v: %v", client.Name(), user.Username, err)
@@ -629,13 +651,22 @@ func (handler *CoreHandler) getProvidersForUser(user models.User) []*ranking.Con
 }
 
 // Gets the default providers for an unauthenticated user
-func (handler *CoreHandler) getDefaultProviders() []*ranking.ContentProvider {
-	println("Building default providers")
+func (handler *CoreHandler) getDefaultProviders(r *http.Request) []*ranking.ContentProvider {
+	clientList := handler.Clients
+	if v, ok := mux.Vars(r)["type"]; ok {
+		// If a specific type was specified in the request we must modify the client list
+		c, err := handler.getClient(v)
+		if err != nil {
+			return []*ranking.ContentProvider{}
+		}
+		clientList = []clients.Client{c}
+	}
+
 	var numProviders int
 
 	// Construct a buffered channel to hold results from each of our client
 	ch := make(chan *ranking.ContentProvider)
-	for _, client := range handler.Clients {
+	for _, client := range clientList {
 		// TODO implement this
 		generator, err := client.GetDefaultPageGenerator()
 		if err != nil {
@@ -689,6 +720,14 @@ func (handler *CoreHandler) GetRSSProviders(ch chan *ranking.ContentProvider, gr
 	return numProviders
 }
 
+// GET /v1/posts/{type}
+// Produces the next set of posts for the given type for the incoming request specified by an optional
+// page_token query paramater
+func (handler *CoreHandler) GetPostsType(w http.ResponseWriter, r *http.Request) {
+	// For now we can mirror the behaviour of standard get posts
+	handler.GetPosts(w, r)
+}
+
 // GET /v1/posts
 // Produces the next set of posts for the incoming request specified by an optional
 // page_token query paramater
@@ -705,7 +744,7 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	s, err := handler.SessionManager.GetSession(r)
 	if err != nil {
 		// Session could not be found so get the posts for a generic user
-		providers = handler.getDefaultProviders()
+		providers = handler.getDefaultProviders(r)
 		handler.getPosts(w, providers)
 		return
 	}
@@ -720,7 +759,7 @@ func (handler *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providers = handler.getProvidersForUser(user)
+	providers = handler.getProvidersForUser(r, user)
 	handler.getPosts(w, providers)
 }
 
@@ -737,8 +776,7 @@ func (handler *CoreHandler) GetCachedProviders(r *http.Request) ([]*ranking.Cont
 				log.Printf("Data associated to page token: %v malformed", token)
 				return nil, errors.New("malformed paging data")
 			}
-			log.Printf("Found providers in cache: %v", token)
-			// Able to retrieve providers from cache
+
 			return providers, nil
 		}
 	}

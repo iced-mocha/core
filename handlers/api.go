@@ -6,6 +6,7 @@ import (
 
 type CoreAPI interface {
 	GetPosts(w http.ResponseWriter, r *http.Request)
+	GetPostsType(w http.ResponseWriter, r *http.Request)
 	InsertUser(w http.ResponseWriter, r *http.Request)
 	GetUser(w http.ResponseWriter, r *http.Request)
 	UpdateRssFeeds(w http.ResponseWriter, r *http.Request)
