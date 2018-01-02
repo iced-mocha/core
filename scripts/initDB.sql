@@ -20,6 +20,7 @@ CREATE TABLE `UserInfo` (
 CREATE TABLE `Rss` (
     `Username` VARCHAR(64) NOT NULL,
     `Feeds` TEXT NOT NULL,
-    `Weight` FLOAT NOT NULL,
-    `Name` VARCHAR(64) NOT NULL
+    `Weight` FLOAT NOT NULL DEFAULT 50,
+    `Name` VARCHAR(64) NOT NULL,
+    PRIMARY KEY (`Username`, `Name`)
 );

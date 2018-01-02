@@ -434,6 +434,20 @@ func (d *driver) UpdateRssFeeds(username string, feeds map[string][]string) erro
 		return err
 	}
 
+	valuesVals := []string{}
+	valuesArgs := make([]interface{}, 0)
+	for name, feeds := range feeds {
+		valuesArgs = append(valuesArgs, username, strings.Join(feeds, ","), name)
+		valuesVals = append(valuesVals, "(?,?,?)")
+	}
+    log.Printf("inserting vallues %v", valuesArgs)
+	_, err = tx.Exec(`
+        INSERT OR IGNORE INTO Rss (Username, Feeds, Name)
+        VALUES `+strings.Join(valuesVals, ","), valuesArgs...)
+	if err != nil {
+		return err
+	}
+
 	values := []string{}
 	args := make([]interface{}, 0)
 	for name := range feeds {
