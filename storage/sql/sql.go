@@ -207,7 +207,11 @@ func (d *driver) GetUser(username string) (models.User, bool, error) {
 
 		if rssName.Valid {
 			name := rssName.String
-			user.RssGroups[name] = strings.Split(rssFeeds.String, ",")
+            if rssFeeds.String == "" {
+                user.RssGroups[name] = []string{}
+            } else {
+                user.RssGroups[name] = strings.Split(rssFeeds.String, ",")
+            }
 			user.PostWeights.RSS[name] = rssWeight.Float64
 		}
 	}
@@ -423,16 +427,18 @@ func (d *driver) UpdateRssFeeds(username string, feeds map[string][]string) erro
 		whereArgs = append(whereArgs, username, name)
 		whereVals = append(whereVals, "? || ?")
 	}
-	_, err = tx.Exec(`
-		UPDATE Rss SET Feeds = CASE Username || Name
-			`+strings.Join(caseVals, " ")+`
-			ELSE Feeds
-			END
-		WHERE Username || Name IN (`+strings.Join(whereVals, ",")+`)
-	`, append(caseArgs, whereArgs...)...)
-	if err != nil {
-		return err
-	}
+    if len(caseVals) > 0 {
+        _, err = tx.Exec(`
+            UPDATE Rss SET Feeds = CASE Username || Name
+                `+strings.Join(caseVals, " ")+`
+                ELSE Feeds
+                END
+            WHERE Username || Name IN (`+strings.Join(whereVals, ",")+`)
+        `, append(caseArgs, whereArgs...)...)
+        if err != nil {
+            return err
+        }
+    }
 
 	valuesVals := []string{}
 	valuesArgs := make([]interface{}, 0)
@@ -440,13 +446,14 @@ func (d *driver) UpdateRssFeeds(username string, feeds map[string][]string) erro
 		valuesArgs = append(valuesArgs, username, strings.Join(feeds, ","), name)
 		valuesVals = append(valuesVals, "(?,?,?)")
 	}
-    log.Printf("inserting vallues %v", valuesArgs)
-	_, err = tx.Exec(`
-        INSERT OR IGNORE INTO Rss (Username, Feeds, Name)
-        VALUES `+strings.Join(valuesVals, ","), valuesArgs...)
-	if err != nil {
-		return err
-	}
+    if len(valuesVals) > 0 {
+        _, err = tx.Exec(`
+            INSERT OR IGNORE INTO Rss (Username, Feeds, Name)
+            VALUES `+strings.Join(valuesVals, ","), valuesArgs...)
+        if err != nil {
+            return err
+        }
+    }
 
 	values := []string{}
 	args := make([]interface{}, 0)
